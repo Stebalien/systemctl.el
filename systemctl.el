@@ -1,4 +1,4 @@
-;; systemctl.el --- Systemctl -*- lexical-binding: t -*-
+;;; systemctl.el --- Systemctl -*- lexical-binding: t -*-
 
 ;; Copyright 2020 Steven Allen <steven@stebalien.com>
 
