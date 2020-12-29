@@ -1,0 +1,196 @@
+;; -*- lexical-binding: t -*-
+(require 'dbus)
+(require 'dash)
+(require 's)
+
+(eval-when-compile (require 'cl-lib))
+
+(defcustom systemctl-unit-types '("service" "timer")
+  "Systemd unit types to display in completion."
+  :type '(choice (const :tag "All" nil)
+                 (repeat :tag "Unit Types" string)))
+
+(defun systemctl--remove-keyword-params (seq)
+  "Remove all keyword/value pairs from a list."
+  (if (null seq) nil
+    (let ((head (car seq))
+          (tail (cdr seq)))
+      (if (keywordp head) (systemctl--remove-keyword-params (cdr tail))
+        (cons head (systemctl--remove-keyword-params tail))))))
+
+
+(cl-defun systemctl--manage (method &rest args &key user async)
+  "Invoke a systemctl management command."
+  (setq args (systemctl--remove-keyword-params args))
+  (if async
+      (apply #'dbus-call-method-asynchronously
+             (if user :session :system)
+             "org.freedesktop.systemd1" "/org/freedesktop/systemd1"
+             "org.freedesktop.systemd1.Manager" method nil args)
+    (apply #'dbus-call-method
+           (if user :session :system)
+           "org.freedesktop.systemd1" "/org/freedesktop/systemd1"
+           "org.freedesktop.systemd1.Manager" method args)))
+
+
+(defun systemctl--list-unit-files (&optional user)
+  (->> (systemctl--manage "ListUnitFiles" :user user)
+       (-map 'car)
+       (-map 'file-name-nondirectory)
+       (-filter (lambda (i) (member (file-name-extension i) systemctl-unit-types)))
+       (-sort 'string-lessp)
+       (delete-consecutive-dups)
+       (-map (lambda (unit)
+               (list (format "%-10s %-100s"
+                             (if user "user" "system")
+                             unit)
+                     unit :user user)))))
+
+(defun systemctl--list-units (&optional user)
+  (->> (systemctl--manage "ListUnits" :user user)
+       (-filter (lambda (i) (member (file-name-extension (car i)) systemctl-unit-types)))
+       (-map (lambda (entry)
+               (let ((unit (car entry))
+                     (desc (car (cdr entry))))
+                 (list (format "%-10s %-100s %s"
+                               (if user "user" "system")
+                               unit
+                               desc)
+                       unit :user user))))))
+
+;; TODO: `systemctl-manage-unit' with ivy and hydra.
+
+;;;###autoload
+(cl-defun systemctl-start (&optional unit &key user)
+  (interactive (systemctl--prompt-service-file "Start Service: "))
+  (systemctl--manage "StartUnit" unit "replace" :user user :async t))
+
+(defun systemctl--prompt-service (prompt)
+  (let ((units (append (systemctl--list-units t) (systemctl--list-units nil))))
+    (cdr (assoc (completing-read prompt units ) units))))
+
+(defun systemctl--prompt-service-file (prompt)
+  (let* ((units (append (systemctl--list-unit-files t) (systemctl--list-unit-files nil)))
+         (tuple (cdr (assoc (completing-read prompt units) units))))
+    (if (s-suffix? "@" (file-name-base (car tuple)))
+        (cons (with-temp-buffer
+                (call-process "systemd-escape" nil t nil
+                              "--template"
+                              (car tuple)
+                              (read-string "Instance: "))
+                (string-trim (buffer-string)))
+              (cdr tuple))
+      tuple)))
+
+;;;###autoload
+(cl-defun systemctl-stop (&optional unit &key user)
+  (interactive (systemctl--prompt-service "Stop Service: "))
+  (systemctl--manage "StopUnit" unit "replace" :user user :async t))
+
+;;;###autoload
+(cl-defun systemctl-restart (unit &key user try)
+  "Restart the systemd unit"
+  (interactive (systemctl--prompt-service "Restart Service: "))
+  (systemctl--manage
+   (if try "TryRestartUnit" "RestartUnit")
+   :user user
+   :async t
+   unit "replace"))
+
+;;;###autoload
+(cl-defun systemctl-reload (unit &key user or-restart)
+  (interactive (systemctl--prompt-service "Reload Service: "))
+  (systemctl--manage
+   (case or-restart
+     (t "ReloadOrRestartUnit")
+     ('try "ReloadOrTryRestartUnit")
+     (nil "ReloadUnit")
+     (_ (error "`or-restart' must either be `t', `'try', or `nil'")))
+   :user user
+   :async t
+   unit "replace"))
+
+
+;;;###autoload
+(cl-defun systemctl-daemon-reload (&key user)
+  "Reload the systemd configuration"
+  (interactive)
+  (systemctl--manage "Reload" :user user :async t))
+
+(defun systemctl--logind-manage (method &rest args)
+  (apply #'dbus-call-method-asynchronously
+         :system "org.freedesktop.login1"
+         "/org/freedesktop/login1"
+         "org.freedesktop.login1.Manager" method nil args))
+
+(defun systemctl--logind-graphical-session ()
+  (car (dbus-get-property
+         :system "org.freedesktop.login1"
+         "/org/freedesktop/login1/user/self"
+         "org.freedesktop.login1.User" "Display")))
+
+(defun systemctl--lock-unlock-common (action &optional session)
+  (cond
+   ((null session) (if (display-graphic-p)
+                       (systemctl--lock-unlock-common
+                        action
+                        (systemctl--logind-graphical-session))
+                     (dbus-call-method-asynchronously
+                        :system "org.freedesktop.login1"
+                        "/org/freedesktop/login1/session/self"
+                        "org.freedesktop.login1.Session" action nil)))
+   ((eq session t) (systemctl--logind-manage (concat action "Sessions")))
+   ((stringp session) (systemctl--logind-manage (concat action "Session") session))
+   (t (error "Invalid `session' argument"))))
+
+;;;###autoload
+(defun systemctl-lock (&optional session)
+  "Lock the current session."
+  (interactive)
+  (systemctl--lock-unlock-common "Lock" session))
+
+;;;###autoload
+(defun systemctl-unlock (&optional session)
+  "Lock the current session."
+  (interactive)
+  (systemctl--lock-unlock-common "Unlock" session))
+
+;;;###autoload
+(defun systemctl-suspend ()
+  "Suspend the system."
+  (interactive)
+  (systemctl--logind-manage "Suspend" t))
+
+;;;###autoload
+(defun systemctl-hibernate ()
+  "Hibernate the system."
+  (interactive)
+  (systemctl--logind-manage "Hibernate" t))
+
+;;;###autoload
+(defun systemctl-hybrid-sleep ()
+  "Hybrid suspend/sleep."
+  (interactive)
+  (systemctl--logind-manage "HybridSleep" t))
+
+;;;###autoload
+(defun systemctl-poweroff ()
+  "Poweroff the system."
+  (interactive)
+  (systemctl--logind-manage "PowerOff" t))
+
+;;;###autoload
+(defun systemctl-reboot ()
+  "Reboot the system."
+  (interactive)
+  (systemctl--logind-manage "Reboot" t))
+
+;;;###autoload
+(defun systemctl-logout ()
+  "Poweroff the system."
+  (interactive)
+  (systemctl-stop "graphical-session.target" :user t))
+
+;; TODO: Wall Messages
+
+(provide 'systemctl)
