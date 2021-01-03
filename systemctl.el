@@ -60,7 +60,7 @@
       (if (keywordp head) (systemctl--remove-keyword-params (cdr tail))
         (cons head (systemctl--remove-keyword-params tail))))))
 
-(cl-defun systemctl--manage (method &rest args &key user async)
+(cl-defun systemctl--manage (method &rest args &key user async &allow-other-keys)
   "Invoke a systemctl management command."
   (setq args (systemctl--remove-keyword-params args))
   (if async
