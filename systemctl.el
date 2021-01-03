@@ -60,7 +60,6 @@
       (if (keywordp head) (systemctl--remove-keyword-params (cdr tail))
         (cons head (systemctl--remove-keyword-params tail))))))
 
-
 (cl-defun systemctl--manage (method &rest args &key user async)
   "Invoke a systemctl management command."
   (setq args (systemctl--remove-keyword-params args))
@@ -143,7 +142,7 @@
 (cl-defun systemctl-reload (unit &key user or-restart)
   (interactive (systemctl--prompt-service "Reload Service: "))
   (systemctl--manage
-   (case or-restart
+   (cl-case or-restart
      (t "ReloadOrRestartUnit")
      ('try "ReloadOrTryRestartUnit")
      (nil "ReloadUnit")
