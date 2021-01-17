@@ -5,7 +5,7 @@
 ;; Author: Steven Allen <steven@stebalien.com>
 ;; URL: https://github.com/Stebalien/systemctl.el
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "27.0"))
+;; Package-Requires: ((emacs "27.0") (dash "20200524") (s "20180406"))
 ;; Keywords: systemd
 
 ;; This file is not part of GNU Emacs.
@@ -82,7 +82,7 @@
        (-sort 'string-lessp)
        (delete-consecutive-dups)
        (-map (lambda (unit)
-               (list (format "%-10s %-100s"
+               (list (format "%-8s %s"
                              (if user "user" "system")
                              unit)
                      unit :user user)))))
@@ -93,7 +93,7 @@
        (-map (lambda (entry)
                (let ((unit (car entry))
                      (desc (car (cdr entry))))
-                 (list (format "%-10s %-100s %s"
+                 (list (format "%-8s %s - %s"
                                (if user "user" "system")
                                unit
                                desc)
