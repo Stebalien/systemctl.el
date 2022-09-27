@@ -142,10 +142,10 @@
 (cl-defun systemctl-reload (unit &key user or-restart)
   (interactive (systemctl--prompt-service "Reload Service: "))
   (systemctl--manage
-   (cl-case or-restart
-     (t "ReloadOrRestartUnit")
+   (pcase or-restart
+     ('t "ReloadOrRestartUnit")
      ('try "ReloadOrTryRestartUnit")
-     (nil "ReloadUnit")
+     ('nil "ReloadUnit")
      (_ (error "`or-restart' must either be `t', `'try', or `nil'")))
    :user user
    :async t
