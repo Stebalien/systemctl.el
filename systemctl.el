@@ -5,7 +5,7 @@
 ;; Author: Steven Allen <steven@stebalien.com>
 ;; URL: https://github.com/Stebalien/systemctl.el
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "27.0") (dash "20200524") (s "20180406"))
+;; Package-Requires: ((emacs "27.0"))
 ;; Keywords: systemd
 
 ;; This file is not part of GNU Emacs.
@@ -35,8 +35,6 @@
 
 ;;; Code:
 (require 'dbus)
-(require 'dash)
-(require 's)
 
 (eval-when-compile (require 'cl-lib))
 
@@ -53,7 +51,7 @@
                  (repeat :tag "Unit Types" string)))
 
 (defun systemctl--remove-keyword-params (seq)
-  "Remove all keyword/value pairs from a list."
+  "Remove all keyword/value pairs from SEQ."
   (if (null seq) nil
     (let ((head (car seq))
           (tail (cdr seq)))
@@ -75,29 +73,34 @@
 
 
 (defun systemctl--list-unit-files (&optional user)
-  (->> (systemctl--manage "ListUnitFiles" :user user)
-       (-map 'car)
-       (-map 'file-name-nondirectory)
-       (-filter (lambda (i) (member (file-name-extension i) systemctl-unit-types)))
-       (-sort 'string-lessp)
-       (delete-consecutive-dups)
-       (-map (lambda (unit)
-               (list (format "%-8s %s"
-                             (if user "user" "system")
-                             unit)
-                     unit :user user)))))
+  "List all unit files.
+
+Lists system units by default, or USER units when specified."
+  (thread-last
+    (systemctl--manage "ListUnitFiles" :user user)
+    (seq-map 'car)
+    (seq-map 'file-name-nondirectory)
+    (seq-filter (lambda (i) (member (file-name-extension i) systemctl-unit-types)))
+    (seq-sort 'string-lessp)
+    (delete-consecutive-dups)
+    (seq-map (lambda (unit) (list (format "%-8s %s"
+                                     (if user "user" "system")
+                                     unit)
+                             unit :user user)))))
 
 (defun systemctl--list-units (&optional user)
-  (->> (systemctl--manage "ListUnits" :user user)
-       (-filter (lambda (i) (member (file-name-extension (car i)) systemctl-unit-types)))
-       (-map (lambda (entry)
-               (let ((unit (car entry))
-                     (desc (car (cdr entry))))
-                 (list (format "%-8s %s - %s"
-                               (if user "user" "system")
-                               unit
-                               desc)
-                       unit :user user))))))
+  "List all units.
+
+Lists system units by default, or USER units when specified."
+  (thread-last
+    (systemctl--manage "ListUnits" :user user)
+       (seq-filter (lambda (i) (member (file-name-extension (car i)) systemctl-unit-types)))
+       (seq-map (pcase-lambda (`(,unit ,desc . ,_))
+                  (list (format "%-8s %s - %s"
+                                (if user "user" "system")
+                                unit
+                                desc)
+                        unit :user user)))))
 
 ;; TODO: `systemctl-manage-unit' with ivy and hydra.
 
@@ -113,7 +116,7 @@
 (defun systemctl--prompt-service-file (prompt)
   (let* ((units (append (systemctl--list-unit-files t) (systemctl--list-unit-files nil)))
          (tuple (cdr (assoc (completing-read prompt units) units))))
-    (if (s-suffix? "@" (file-name-base (car tuple)))
+    (if (string-suffix-p "@" (file-name-base (car tuple)))
         (cons (with-temp-buffer
                 (call-process "systemd-escape" nil t nil
                               "--template"
