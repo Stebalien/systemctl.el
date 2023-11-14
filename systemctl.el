@@ -58,7 +58,7 @@
       (if (keywordp head) (systemctl--remove-keyword-params (cdr tail))
         (cons head (systemctl--remove-keyword-params tail))))))
 
-(cl-defun systemctl--manage (method &rest args &key user async &allow-other-keys)
+(cl-defun systemctl-manage (method &rest args &key user async &allow-other-keys)
   "Invoke a systemctl management METHOD with the specified ARGS.
 
 Specify USER to manage a user unit, and ASYNC to invoke dbus asynchronously.
@@ -80,7 +80,7 @@ If ASYNC is a function, it'll be called when the method completes."
 
 Lists system units by default, or USER units when specified."
   (thread-last
-    (systemctl--manage "ListUnitFiles" :user user)
+    (systemctl-manage "ListUnitFiles" :user user)
     (seq-map 'car)
     (seq-map 'file-name-nondirectory)
     (seq-filter (lambda (i) (member (file-name-extension i) systemctl-unit-types)))
@@ -97,7 +97,7 @@ Lists system units by default, or USER units when specified."
 Lists system units matching `systemctl-unit-types' by default,
 or USER units when specified."
   (thread-last
-    (systemctl--manage "ListUnits" :user user)
+    (systemctl-manage "ListUnits" :user user)
     (seq-filter (lambda (i) (member (file-name-extension (car i)) systemctl-unit-types)))
     (seq-map (pcase-lambda (`(,unit ,desc . ,_))
                (list (format "%-8s %s - %s"
@@ -114,7 +114,7 @@ or USER units when specified."
 
 Specify USER to manage a user unit."
   (interactive (systemctl--prompt-unit-file "Start Service: "))
-  (systemctl--manage "StartUnit" unit "replace" :user user :async t))
+  (systemctl-manage "StartUnit" unit "replace" :user user :async t))
 
 (defun systemctl--prompt-unit (prompt)
   "Prompt for a unit (limited to loaded units).
@@ -147,7 +147,7 @@ Bind or customize `systemctl-unit-types' to limit the allowed unit types."
 
 Specify USER to restart a user unit."
   (interactive (systemctl--prompt-unit "Stop Service: "))
-  (systemctl--manage "StopUnit" unit "replace" :user user :async t))
+  (systemctl-manage "StopUnit" unit "replace" :user user :async t))
 
 ;;;###autoload
 (cl-defun systemctl-restart (unit &key user try)
@@ -156,7 +156,7 @@ Specify USER to restart a user unit."
 Specify USER to restart a user unit.
 Specify TRY to try to restart the unit, if and only if it's already running."
   (interactive (systemctl--prompt-unit "Restart Service: "))
-  (systemctl--manage
+  (systemctl-manage
    (if try "TryRestartUnit" "RestartUnit")
    :user user
    :async t
@@ -169,7 +169,7 @@ Specify TRY to try to restart the unit, if and only if it's already running."
 Specify USER to reload a user unit.
 Specify OR-RESTART to restart the unit if it cannot be reloaded."
   (interactive (systemctl--prompt-unit "Reload Service: "))
-  (systemctl--manage
+  (systemctl-manage
    (pcase or-restart
      ('t "ReloadOrRestartUnit")
      ('try "ReloadOrTryRestartUnit")
@@ -186,7 +186,7 @@ Specify OR-RESTART to restart the unit if it cannot be reloaded."
 
 Specify USER to reload the configuration of the user daemon."
   (interactive)
-  (systemctl--manage "Reload" :user user :async t))
+  (systemctl-manage "Reload" :user user :async t))
 
 (defun systemctl--logind-manage (method &rest args)
   "Invoke a management METHOD on logind with the specified ARGS."
