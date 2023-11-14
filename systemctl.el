@@ -196,9 +196,9 @@ Specify USER to reload the configuration of the user daemon."
 (defun systemctl--logind-graphical-session ()
   "Return the graphical session."
   (car (dbus-get-property
-         :system "org.freedesktop.login1"
-         "/org/freedesktop/login1/user/self"
-         "org.freedesktop.login1.User" "Display")))
+        :system "org.freedesktop.login1"
+        "/org/freedesktop/login1/user/self"
+        "org.freedesktop.login1.User" "Display")))
 
 (defun systemctl--lock-unlock-common (action &optional session)
   "Lock or Unlock (ACTION) the specified SESSION."
@@ -208,9 +208,9 @@ Specify USER to reload the configuration of the user daemon."
                         action
                         (systemctl--logind-graphical-session))
                      (dbus-call-method-asynchronously
-                        :system "org.freedesktop.login1"
-                        "/org/freedesktop/login1/session/self"
-                        "org.freedesktop.login1.Session" action nil)))
+                      :system "org.freedesktop.login1"
+                      "/org/freedesktop/login1/session/self"
+                      "org.freedesktop.login1.Session" action nil)))
    ((eq session t) (systemctl--logind-manage (concat action "Sessions")))
    ((stringp session) (systemctl--logind-manage (concat action "Session") session))
    (t (error "Invalid `session' argument"))))
