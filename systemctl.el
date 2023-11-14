@@ -105,7 +105,7 @@ Lists system units by default, or USER units when specified."
 ;; TODO: `systemctl-manage-unit' with ivy and hydra.
 
 ;;;###autoload
-(cl-defun systemctl-start (&optional unit &key user)
+(cl-defun systemctl-start (unit &key user)
   (interactive (systemctl--prompt-service-file "Start Service: "))
   (systemctl--manage "StartUnit" unit "replace" :user user :async t))
 
@@ -127,7 +127,7 @@ Lists system units by default, or USER units when specified."
       tuple)))
 
 ;;;###autoload
-(cl-defun systemctl-stop (&optional unit &key user)
+(cl-defun systemctl-stop (unit &key user)
   (interactive (systemctl--prompt-service "Stop Service: "))
   (systemctl--manage "StopUnit" unit "replace" :user user :async t))
 
