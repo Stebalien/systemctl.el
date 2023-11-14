@@ -111,11 +111,11 @@ Lists system units by default, or USER units when specified."
 
 (defun systemctl--prompt-service (prompt)
   (let ((units (append (systemctl--list-units t) (systemctl--list-units nil))))
-    (cdr (assoc (completing-read prompt units ) units))))
+    (cdr (assoc (completing-read prompt units nil t) units))))
 
 (defun systemctl--prompt-service-file (prompt)
   (let* ((units (append (systemctl--list-unit-files t) (systemctl--list-unit-files nil)))
-         (tuple (cdr (assoc (completing-read prompt units) units))))
+         (tuple (cdr (assoc (completing-read prompt units nil t) units))))
     (if (string-suffix-p "@" (file-name-base (car tuple)))
         (cons (with-temp-buffer
                 (call-process "systemd-escape" nil t nil
