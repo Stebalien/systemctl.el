@@ -59,7 +59,8 @@
         (cons head (systemctl--remove-keyword-params tail))))))
 
 (cl-defun systemctl--manage (method &rest args &key user async &allow-other-keys)
-  "Invoke a systemctl management command."
+  "Invoke a systemctl management METHOD with the specified ARGS.
+Specify USER to manage a user unit, and ASYNC to invoke dbus asynchronously."
   (setq args (systemctl--remove-keyword-params args))
   (if async
       (apply #'dbus-call-method-asynchronously
@@ -91,29 +92,41 @@ Lists system units by default, or USER units when specified."
 (defun systemctl--list-units (&optional user)
   "List all units.
 
-Lists system units by default, or USER units when specified."
+Lists system units matching `systemctl-unit-types' by default,
+or USER units when specified."
   (thread-last
     (systemctl--manage "ListUnits" :user user)
-       (seq-filter (lambda (i) (member (file-name-extension (car i)) systemctl-unit-types)))
-       (seq-map (pcase-lambda (`(,unit ,desc . ,_))
-                  (list (format "%-8s %s - %s"
-                                (if user "user" "system")
-                                unit
-                                desc)
-                        unit :user user)))))
+    (seq-filter (lambda (i) (member (file-name-extension (car i)) systemctl-unit-types)))
+    (seq-map (pcase-lambda (`(,unit ,desc . ,_))
+               (list (format "%-8s %s - %s"
+                             (if user "user" "system")
+                             unit
+                             desc)
+                     unit :user user)))))
 
 ;; TODO: `systemctl-manage-unit' with ivy and hydra.
 
 ;;;###autoload
 (cl-defun systemctl-start (unit &key user)
-  (interactive (systemctl--prompt-service-file "Start Service: "))
+  "Start a UNIT.
+
+Specify USER to manage a user unit."
+  (interactive (systemctl--prompt-unit-file "Start Service: "))
   (systemctl--manage "StartUnit" unit "replace" :user user :async t))
 
-(defun systemctl--prompt-service (prompt)
+(defun systemctl--prompt-unit (prompt)
+  "Prompt for a unit (limited to loaded units).
+
+PROMPT is a string to prompt with.
+Bind or customize `systemctl-unit-types' to limit the allowed unit types."
   (let ((units (append (systemctl--list-units t) (systemctl--list-units nil))))
     (cdr (assoc (completing-read prompt units nil t) units))))
 
-(defun systemctl--prompt-service-file (prompt)
+(defun systemctl--prompt-unit-file (prompt)
+  "Prompt for a unit file (all known units).
+
+PROMPT is a string to prompt with.
+Bind or customize `systemctl-unit-types' to limit the allowed unit types."
   (let* ((units (append (systemctl--list-unit-files t) (systemctl--list-unit-files nil)))
          (tuple (cdr (assoc (completing-read prompt units nil t) units))))
     (if (string-suffix-p "@" (file-name-base (car tuple)))
@@ -128,13 +141,19 @@ Lists system units by default, or USER units when specified."
 
 ;;;###autoload
 (cl-defun systemctl-stop (unit &key user)
-  (interactive (systemctl--prompt-service "Stop Service: "))
+  "Start a systemd UNIT.
+
+Specify USER to restart a user unit."
+  (interactive (systemctl--prompt-unit "Stop Service: "))
   (systemctl--manage "StopUnit" unit "replace" :user user :async t))
 
 ;;;###autoload
 (cl-defun systemctl-restart (unit &key user try)
-  "Restart the systemd unit"
-  (interactive (systemctl--prompt-service "Restart Service: "))
+  "Restart the systemd UNIT.
+
+Specify USER to restart a user unit.
+Specify TRY to try to restart the unit, if and only if it's already running."
+  (interactive (systemctl--prompt-unit "Restart Service: "))
   (systemctl--manage
    (if try "TryRestartUnit" "RestartUnit")
    :user user
@@ -143,7 +162,11 @@ Lists system units by default, or USER units when specified."
 
 ;;;###autoload
 (cl-defun systemctl-reload (unit &key user or-restart)
-  (interactive (systemctl--prompt-service "Reload Service: "))
+  "Reload the systemd UNIT.
+
+Specify USER to reload a user unit.
+Specify OR-RESTART to restart the unit if it cannot be reloaded."
+  (interactive (systemctl--prompt-unit "Reload Service: "))
   (systemctl--manage
    (pcase or-restart
      ('t "ReloadOrRestartUnit")
@@ -157,23 +180,28 @@ Lists system units by default, or USER units when specified."
 
 ;;;###autoload
 (cl-defun systemctl-daemon-reload (&key user)
-  "Reload the systemd configuration"
+  "Reload the systemd configuration.
+
+Specify USER to reload the configuration of the user daemon."
   (interactive)
   (systemctl--manage "Reload" :user user :async t))
 
 (defun systemctl--logind-manage (method &rest args)
+  "Invoke a management METHOD on logind with the specified ARGS."
   (apply #'dbus-call-method-asynchronously
          :system "org.freedesktop.login1"
          "/org/freedesktop/login1"
          "org.freedesktop.login1.Manager" method nil args))
 
 (defun systemctl--logind-graphical-session ()
+  "Return the graphical session."
   (car (dbus-get-property
          :system "org.freedesktop.login1"
          "/org/freedesktop/login1/user/self"
          "org.freedesktop.login1.User" "Display")))
 
 (defun systemctl--lock-unlock-common (action &optional session)
+  "Lock or Unlock (ACTION) the specified SESSION."
   (cond
    ((null session) (if (display-graphic-p)
                        (systemctl--lock-unlock-common
@@ -189,13 +217,13 @@ Lists system units by default, or USER units when specified."
 
 ;;;###autoload
 (defun systemctl-lock (&optional session)
-  "Lock the current session."
+  "Lock the current or specified SESSION."
   (interactive)
   (systemctl--lock-unlock-common "Lock" session))
 
 ;;;###autoload
 (defun systemctl-unlock (&optional session)
-  "Lock the current session."
+  "Lock the current or specified SESSION."
   (interactive)
   (systemctl--lock-unlock-common "Unlock" session))
 
@@ -238,3 +266,4 @@ Lists system units by default, or USER units when specified."
 ;; TODO: Wall Messages
 
 (provide 'systemctl)
+;;; systemctl.el ends here
