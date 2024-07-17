@@ -6,7 +6,7 @@
 ;; URL: https://github.com/Stebalien/systemctl.el
 ;; Version: 0.0.1
 ;; Package-Requires: ((emacs "27.0"))
-;; Keywords: systemd
+;; Keywords: systemd, unix
 
 ;; This file is not part of GNU Emacs.
 
@@ -64,11 +64,14 @@
 Specify USER to manage a user unit, and ASYNC to invoke dbus asynchronously.
 If ASYNC is a function, it'll be called when the method completes."
   (setq args (systemctl--remove-keyword-params args))
+  (when (version<= "31.0" emacs-version)
+    (setq args (append '(:authorizable t) args)))
   (if async
       (apply #'dbus-call-method-asynchronously
              (if user :session :system)
              "org.freedesktop.systemd1" "/org/freedesktop/systemd1"
-             "org.freedesktop.systemd1.Manager" method (and (functionp async) async) args)
+             "org.freedesktop.systemd1.Manager" method (and (functionp async) async)
+             args)
     (apply #'dbus-call-method
            (if user :session :system)
            "org.freedesktop.systemd1" "/org/freedesktop/systemd1"
