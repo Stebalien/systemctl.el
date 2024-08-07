@@ -109,8 +109,6 @@ or USER units when specified."
                              desc)
                      unit :user user)))))
 
-;; TODO: `systemctl-manage-unit' with ivy and hydra.
-
 ;;;###autoload
 (cl-defun systemctl-start (unit &key user)
   "Start a UNIT.
@@ -267,8 +265,6 @@ Specify USER to reload the configuration of the user daemon."
   "Poweroff the system."
   (interactive)
   (systemctl-stop "graphical-session.target" :user t))
-
-;; TODO: Wall Messages
 
 (provide 'systemctl)
 ;;; systemctl.el ends here
