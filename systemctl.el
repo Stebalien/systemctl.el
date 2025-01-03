@@ -5,7 +5,7 @@
 ;; Author: Steven Allen <steven@stebalien.com>
 ;; URL: https://github.com/Stebalien/systemctl.el
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "27.0"))
+;; Package-Requires: ((emacs "29.0"))
 ;; Keywords: systemd, unix
 
 ;; This file is not part of GNU Emacs.
@@ -34,6 +34,7 @@
 ;; Emacs 27.0.0
 
 ;;; Code:
+(require 'transient)
 (require 'dbus)
 
 (eval-when-compile (require 'cl-lib))
@@ -189,12 +190,23 @@ Specify USER to reload the configuration of the user daemon."
   (interactive)
   (systemctl-manage "Reload" :user user :async t))
 
-(defun systemctl--logind-manage (method &rest args)
-  "Invoke a management METHOD on logind with the specified ARGS."
-  (apply #'dbus-call-method-asynchronously
-         :system "org.freedesktop.login1"
-         "/org/freedesktop/login1"
-         "org.freedesktop.login1.Manager" method nil args))
+
+(cl-defun systemctl--logind-manage (method &rest args &key async &allow-other-keys)
+  "Invoke a management METHOD on logind with the specified ARGS.
+
+If ASYNC is non-nil, invoke asynchronously."
+  (setq args (systemctl--remove-keyword-params args))
+  (when (version<= "31.0" emacs-version)
+    (setq args (append '(:authorizable t) args)))
+  (if async
+      (apply #'dbus-call-method-asynchronously
+             :system "org.freedesktop.login1"
+             "/org/freedesktop/login1"
+             "org.freedesktop.login1.Manager" method nil args)
+    (apply #'dbus-call-method
+           :system "org.freedesktop.login1"
+           "/org/freedesktop/login1"
+           "org.freedesktop.login1.Manager" method  args)))
 
 (defun systemctl--logind-graphical-session ()
   "Return the graphical session."
@@ -202,6 +214,13 @@ Specify USER to reload the configuration of the user daemon."
         :system "org.freedesktop.login1"
         "/org/freedesktop/login1/user/self"
         "org.freedesktop.login1.User" "Display")))
+
+(defun systemctl--logind-property (name)
+  "Get a logind property."
+  (dbus-get-property
+   :system "org.freedesktop.login1"
+   "/org/freedesktop/login1"
+   "org.freedesktop.login1.Manager" name))
 
 (defun systemctl--lock-unlock-common (action &optional session)
   "Lock or Unlock (ACTION) the specified SESSION."
@@ -265,6 +284,103 @@ Specify USER to reload the configuration of the user daemon."
   "Poweroff the system."
   (interactive)
   (systemctl-stop "graphical-session.target" :user t))
+
+
+(defun systemctl--can-reboot-p ()
+  "Check if system can reboot."
+  (string= "yes" (systemctl--logind-manage "CanReboot")))
+
+(defun systemctl--can-poweroff-p ()
+  "Check if system can poweroff."
+  (string= "yes" (systemctl--logind-manage "CanPowerOff")))
+
+
+(defun systemctl--set-boot-entry (entry)
+  "Set boot entry to use on next boot."
+  ;; Stub - should call dbus
+  (interactive)
+  entry)
+
+;; Reboot Firmware
+
+(defun systemctl--can-reboot-firmware-p ()
+  "Check if system can reboot to firmware."
+  (string= "yes" (systemctl--logind-manage "CanRebootToFirmwareSetup")))
+
+(defun systemctl--get-reboot-firmware ()
+  "Check if system can reboot to firmware."
+  (systemctl--logind-property "RebootToFirmwareSetup"))
+
+(transient-define-suffix systemctl--set-reboot-firmware (&optional value)
+  :transient 'transient--do-stay
+  :inapt-if-not 'systemctl--can-reboot-firmware-p
+  :description (lambda ()
+                 (format "Reboot to firmware setup (%s)"
+                         (if (systemctl--get-reboot-firmware)
+                             (propertize "yes" 'face 'transient-value)
+                           (propertize "no" 'face 'transient-inactive-value))))
+  (interactive (list (not (systemctl--get-reboot-firmware))))
+  (systemctl--logind-manage "SetRebootToFirmwareSetup" :async nil value))
+
+;; Bootloader Menu
+
+(defun systemctl--can-reboot-bootloader-p ()
+  "Check if system can reboot to bootloader menu."
+  (string= "yes" (systemctl--logind-manage "CanRebootToBootLoaderMenu")))
+
+(defun systemctl--get-reboot-bootloader ()
+  "Check if system can reboot to firmware."
+  (let ((timeout (systemctl--logind-property  "RebootToBootLoaderMenu")))
+    (unless (= timeout (1- (ash 1 64))) timeout)))
+
+(transient-define-suffix systemctl--set-reboot-bootloader (&optional timeout)
+  :transient 'transient--do-stay
+  :inapt-if-not 'systemctl--can-reboot-bootloader-p
+  :description (lambda ()
+                 (format "Show boot menu (%s)"
+                         (if-let* ((timeout (systemctl--get-reboot-bootloader)))
+                             (propertize (format "%ds" timeout) 'face 'transient-value)
+                           (propertize "no" 'face 'transient-inactive-value))))
+  (interactive (list (xor (systemctl--get-reboot-bootloader)
+                          (read-string "Timeout (seconds) [5]: " nil nil 5))))
+  (systemctl--logind-manage "RebootToBootLoaderMenu" :async nil timeout))
+
+;; Boot Entry
+
+(defun systemctl--can-reboot-entry-p ()
+  "Check if system can reboot to bootloader entries."
+  (string= "yes" (systemctl--logind-manage "CanRebootToBootLoaderEntry")))
+
+(defun systemctl--get-reboot-entry ()
+  "Get the active bootloader entry."
+  (when-let* ((e (systemctl--logind-property "RebootToBootLoaderEntry"))
+              ((not (string-empty-p e))))
+    e))
+
+(transient-define-suffix systemctl--set-reboot-entry (&optional entry)
+  :transient 'transient--do-stay
+  :inapt-if-not 'systemctl--can-reboot-entry-p
+  :description (lambda ()
+                 (format "Reboot To Entry (%s)"
+                         (if-let* ((entry (systemctl--get-reboot-entry)))
+                             (propertize entry 'face 'transient-value)
+                           (propertize "none" 'face 'transient-inactive-value))))
+  (interactive (list (completing-read "Boot Next: "
+                                      (systemctl--logind-property "BootLoaderEntries")
+                                      nil t)))
+  (systemctl--logind-manage "SetRebootToBootLoaderEntry" :async nil entry))
+
+(transient-define-prefix systemctl-boot-menu ()
+  "Menu for managing the system's powered state."
+  ["Boot Options"
+   ("-s" systemctl--set-reboot-firmware)
+   ("-m" systemctl--set-reboot-bootloader)
+   ("-e" systemctl--set-reboot-entry)]
+  ["Actions"
+   ("r" "Reboot" systemctl-reboot
+    :inapt-if-not systemctl--can-reboot-p)
+   ("o" "Shutdown" systemctl-poweroff
+    :inapt-if-not systemctl--can-poweroff-p)])
 
 (provide 'systemctl)
 ;;; systemctl.el ends here
