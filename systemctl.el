@@ -65,7 +65,7 @@
 Specify USER to manage a user unit, and ASYNC to invoke dbus asynchronously.
 If ASYNC is a function, it'll be called when the method completes."
   (setq args (systemctl--remove-keyword-params args))
-  (when (version<= "31.0" emacs-version)
+  (when (and (not noninteractive) (version<= "31.0" emacs-version))
     (setq args (append '(:authorizable t) args)))
   (if async
       (apply #'dbus-call-method-asynchronously
@@ -196,7 +196,7 @@ Specify USER to reload the configuration of the user daemon."
 
 If ASYNC is non-nil, invoke asynchronously."
   (setq args (systemctl--remove-keyword-params args))
-  (when (version<= "31.0" emacs-version)
+  (when (and (not noninteractive) (version<= "31.0" emacs-version))
     (setq args (append '(:authorizable t) args)))
   (if async
       (apply #'dbus-call-method-asynchronously
