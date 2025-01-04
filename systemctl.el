@@ -181,7 +181,6 @@ Specify OR-RESTART to restart the unit if it cannot be reloaded."
    :async t
    unit "replace"))
 
-
 ;;;###autoload
 (cl-defun systemctl-daemon-reload (&key user)
   "Reload the systemd configuration.
@@ -189,7 +188,6 @@ Specify OR-RESTART to restart the unit if it cannot be reloaded."
 Specify USER to reload the configuration of the user daemon."
   (interactive)
   (systemctl-manage "Reload" :user user :async t))
-
 
 (cl-defun systemctl--logind-manage (method &rest args &key async &allow-other-keys)
   "Invoke a management METHOD on logind with the specified ARGS.
@@ -208,13 +206,6 @@ If ASYNC is non-nil, invoke asynchronously."
            "/org/freedesktop/login1"
            "org.freedesktop.login1.Manager" method  args)))
 
-(defun systemctl--logind-graphical-session ()
-  "Return the graphical session."
-  (car (dbus-get-property
-        :system "org.freedesktop.login1"
-        "/org/freedesktop/login1/user/self"
-        "org.freedesktop.login1.User" "Display")))
-
 (defun systemctl--logind-property (name)
   "Get the logind property named NAME."
   (dbus-get-property
@@ -227,14 +218,10 @@ If ASYNC is non-nil, invoke asynchronously."
 (defun systemctl--lock-unlock-common (action &optional session)
   "Lock or Unlock (ACTION) the specified SESSION."
   (cond
-   ((null session) (if (display-graphic-p)
-                       (systemctl--lock-unlock-common
-                        action
-                        (systemctl--logind-graphical-session))
-                     (dbus-call-method-asynchronously
-                      :system "org.freedesktop.login1"
-                      "/org/freedesktop/login1/session/self"
-                      "org.freedesktop.login1.Session" action nil)))
+   ((null session) (dbus-call-method-asynchronously
+                    :system "org.freedesktop.login1"
+                    "/org/freedesktop/login1/session/auto"
+                    "org.freedesktop.login1.Session" action nil))
    ((eq session t) (systemctl--logind-manage (concat action "Sessions")))
    ((stringp session) (systemctl--logind-manage (concat action "Session") session))
    (t (error "Invalid `session' argument"))))
@@ -428,7 +415,7 @@ When called interactively, entry into the firmware setup is toggled."
   :transient 'transient--do-stay
   :inapt-if-not 'systemctl--can-reboot-entry-p
   :description (lambda ()
-                 (format "Reboot To Entry (%s)"
+                 (format "Reboot to entry (%s)"
                          (if-let* ((entry (systemctl--get-reboot-entry)))
                              (propertize entry 'face 'transient-value)
                            (propertize "none" 'face 'transient-inactive-value))))
@@ -441,10 +428,6 @@ When called interactively, entry into the firmware setup is toggled."
 
 (transient-define-prefix systemctl-power-menu ()
   "Menu for managing the system's powered state."
-  ["Reboot Options"
-   ("-s" systemctl-set-reboot-firmware)
-   ("-m" systemctl-set-reboot-bootloader)
-   ("-e" systemctl-set-reboot-entry)]
   ["Actions"
    [(3 "z" systemctl-sleep)
     (4 "h" systemctl-hibernate)
@@ -453,7 +436,11 @@ When called interactively, entry into the firmware setup is toggled."
     (5 "S" systemctl-suspend-then-hibernate)
     ]
    [(3 "r" systemctl-reboot)
-    (3 "o" systemctl-poweroff)]])
+    (3 "o" systemctl-poweroff)]]
+  ["On next reboot..."
+   ("-s" systemctl-set-reboot-firmware)
+   ("-m" systemctl-set-reboot-bootloader)
+   ("-e" systemctl-set-reboot-entry)])
 
 (provide 'systemctl)
 ;;; systemctl.el ends here
