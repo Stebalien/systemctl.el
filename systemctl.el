@@ -216,11 +216,13 @@ If ASYNC is non-nil, invoke asynchronously."
         "org.freedesktop.login1.User" "Display")))
 
 (defun systemctl--logind-property (name)
-  "Get a logind property."
+  "Get the logind property named NAME."
   (dbus-get-property
    :system "org.freedesktop.login1"
    "/org/freedesktop/login1"
    "org.freedesktop.login1.Manager" name))
+
+;;; Lock/Unlock
 
 (defun systemctl--lock-unlock-common (action &optional session)
   "Lock or Unlock (ACTION) the specified SESSION."
@@ -249,59 +251,117 @@ If ASYNC is non-nil, invoke asynchronously."
   (interactive)
   (systemctl--lock-unlock-common "Unlock" session))
 
-;;;###autoload
-(defun systemctl-suspend ()
+;;; Suspend
+
+(defun systemctl--can-suspend-p ()
+  "Check if system can suspend."
+  (string= "yes" (systemctl--logind-manage "CanSuspend")))
+
+;;;###autoload(autoload 'systemctl-suspend "systemctl" nil t)
+(transient-define-suffix systemctl-suspend ()
   "Suspend the system."
+  :description "Suspend"
+  :inapt-if-not 'systemctl--can-suspend-p
   (interactive)
   (systemctl--logind-manage "Suspend" t))
 
-;;;###autoload
-(defun systemctl-hibernate ()
+;;; Hibernate
+
+(defun systemctl--can-hibernate-p ()
+  "Check if system can hibernate."
+  (string= "yes" (systemctl--logind-manage "CanHibernate")))
+
+;;;###autoload(autoload 'systemctl-hibernate "systemctl" nil t)
+(transient-define-suffix systemctl-hibernate ()
   "Hibernate the system."
+  :description "Hibernate"
+  :inapt-if-not 'systemctl--can-hibernate-p
   (interactive)
   (systemctl--logind-manage "Hibernate" t))
 
-;;;###autoload
-(defun systemctl-hybrid-sleep ()
-  "Hybrid suspend/sleep."
+;;; Hybrid-sleep
+
+(defun systemctl--can-hybrid-sleep-p ()
+  "Check if system can hybrid-sleep."
+  (string= "yes" (systemctl--logind-manage "CanHybridSleep")))
+
+;;;###autoload(autoload 'systemctl-hybrid-sleep "systemctl" nil t)
+(transient-define-suffix systemctl-hybrid-sleep ()
+  "Hybrid suspend/sleep (suspend and hibernate at the same time)."
+  :description "Hybrid sleep (suspend to both)"
+  :inapt-if-not 'systemctl--can-hybrid-sleep-p
   (interactive)
   (systemctl--logind-manage "HybridSleep" t))
 
-;;;###autoload
-(defun systemctl-poweroff ()
-  "Poweroff the system."
+;;; Suspend then hibernate
+
+(defun systemctl--can-suspend-then-hibernate-p ()
+  "Check if system can suspend-then-hibernate."
+  (string= "yes" (systemctl--logind-manage "CanSuspendThenHibernate")))
+
+;;;###autoload(autoload 'systemctl-suspend-then-hibernate "systemctl" nil t)
+(transient-define-suffix systemctl-suspend-then-hibernate ()
+  "Suspend now then hibernate once the system reaches a critical battery level."
+  :description "Suspend Then Hibernate"
+  :inapt-if-not 'systemctl--can-suspend-then-hibernate-p
   (interactive)
-  (systemctl--logind-manage "PowerOff" t))
+  (systemctl--logind-manage "SuspendThenHibernate" t))
 
-;;;###autoload
-(defun systemctl-reboot ()
-  "Reboot the system."
+;;; Sleep
+
+(defun systemctl--can-sleep-p ()
+  "Check if system can sleep (using the default method)."
+  (string= "yes" (systemctl--logind-manage "CanSleep")))
+
+(defconst systemctl--sleep-actions
+  '(("suspend-then-hibernate" . systemctl--can-suspend-then-hibernate-p)
+    ("hybrid-sleep" . systemctl--can-hybrid-sleep-p)
+    ("suspend" . systemctl--can-suspend-p)
+    ("hibernate" . systemctl--can-hibernate-p)))
+
+(defun systemctl--get-sleep-operation ()
+  "Get the default sleep operation."
+  (let ((ops (systemctl--logind-property "SleepOperation")))
+    (cl-loop for (action . test) in systemctl--sleep-actions
+             when (member action ops)
+             when (funcall test)
+             return action)))
+
+;;;###autoload(autoload 'systemctl-sleep "systemctl" nil t)
+(transient-define-suffix systemctl-sleep ()
+  "Put the system to sleep via the default suspend mechanism."
+  :description (lambda () (format "Sleep (%s)" (or (systemctl--get-sleep-operation) "none")))
+  :inapt-if-not 'systemctl--can-sleep-p
   (interactive)
-  (systemctl--logind-manage "Reboot" t))
-
-;;;###autoload
-(defun systemctl-logout ()
-  "Poweroff the system."
-  (interactive)
-  (systemctl-stop "graphical-session.target" :user t))
-
-
-(defun systemctl--can-reboot-p ()
-  "Check if system can reboot."
-  (string= "yes" (systemctl--logind-manage "CanReboot")))
+  (systemctl--logind-manage "Sleep" t))
 
 (defun systemctl--can-poweroff-p ()
   "Check if system can poweroff."
   (string= "yes" (systemctl--logind-manage "CanPowerOff")))
 
-
-(defun systemctl--set-boot-entry (entry)
-  "Set boot entry to use on next boot."
-  ;; Stub - should call dbus
+;;;###autoload(autoload 'systemctl-poweroff "systemctl" nil t)
+(transient-define-suffix systemctl-poweroff ()
+  "Shut down and power-off the system."
+  :description "Shutdown"
+  :inapt-if-not 'systemctl--can-poweroff-p
   (interactive)
-  entry)
+  (systemctl--logind-manage "PowerOff" t))
 
-;; Reboot Firmware
+;;; Reboot
+
+(defun systemctl--can-reboot-p ()
+  "Check if system can reboot."
+  (string= "yes" (systemctl--logind-manage "CanReboot")))
+
+;;;###autoload(autoload 'systemctl-reboot "systemctl" nil t)
+(transient-define-suffix systemctl-reboot ()
+  "Reboot the system."
+  :description "Reboot"
+  :inapt-if-not 'systemctl--can-reboot-p
+  (interactive)
+  (systemctl--logind-manage "Reboot" t))
+
+;;; Reboot to firmware
 
 (defun systemctl--can-reboot-firmware-p ()
   "Check if system can reboot to firmware."
@@ -311,18 +371,21 @@ If ASYNC is non-nil, invoke asynchronously."
   "Check if system can reboot to firmware."
   (systemctl--logind-property "RebootToFirmwareSetup"))
 
-(transient-define-suffix systemctl--set-reboot-firmware (&optional value)
+;;;###autoload(autoload 'systemctl-set-reboot-firmware "systemctl" nil t)
+(transient-define-suffix systemctl-set-reboot-firmware (enable)
+  "On reboot, ENABLE entry into the system firmware setup.
+When called interactively, entry into the firmware setup is toggled."
   :transient 'transient--do-stay
   :inapt-if-not 'systemctl--can-reboot-firmware-p
   :description (lambda ()
                  (format "Reboot to firmware setup (%s)"
                          (if (systemctl--get-reboot-firmware)
-                             (propertize "yes" 'face 'transient-value)
-                           (propertize "no" 'face 'transient-inactive-value))))
+                             (propertize "on" 'face 'transient-value)
+                           (propertize "off" 'face 'transient-inactive-value))))
   (interactive (list (not (systemctl--get-reboot-firmware))))
-  (systemctl--logind-manage "SetRebootToFirmwareSetup" :async nil value))
+  (systemctl--logind-manage "SetRebootToFirmwareSetup" :async nil enable))
 
-;; Bootloader Menu
+;;; Reboot to bootloader
 
 (defun systemctl--can-reboot-bootloader-p ()
   "Check if system can reboot to bootloader menu."
@@ -333,19 +396,21 @@ If ASYNC is non-nil, invoke asynchronously."
   (let ((timeout (systemctl--logind-property  "RebootToBootLoaderMenu")))
     (unless (= timeout (1- (ash 1 64))) timeout)))
 
-(transient-define-suffix systemctl--set-reboot-bootloader (&optional timeout)
+;;;###autoload(autoload 'systemctl-set-reboot-bootloader "systemctl" nil t)
+(transient-define-suffix systemctl-set-reboot-bootloader (&optional timeout)
+  "On reboot, pause in the bootloader for TIMEOUT seconds."
   :transient 'transient--do-stay
   :inapt-if-not 'systemctl--can-reboot-bootloader-p
   :description (lambda ()
                  (format "Show boot menu (%s)"
                          (if-let* ((timeout (systemctl--get-reboot-bootloader)))
                              (propertize (format "%ds" timeout) 'face 'transient-value)
-                           (propertize "no" 'face 'transient-inactive-value))))
+                           (propertize "off" 'face 'transient-inactive-value))))
   (interactive (list (xor (systemctl--get-reboot-bootloader)
                           (read-string "Timeout (seconds) [5]: " nil nil 5))))
   (systemctl--logind-manage "RebootToBootLoaderMenu" :async nil timeout))
 
-;; Boot Entry
+;;; Set next boot
 
 (defun systemctl--can-reboot-entry-p ()
   "Check if system can reboot to bootloader entries."
@@ -357,7 +422,9 @@ If ASYNC is non-nil, invoke asynchronously."
               ((not (string-empty-p e))))
     e))
 
-(transient-define-suffix systemctl--set-reboot-entry (&optional entry)
+;;;###autoload(autoload 'systemctl-set-reboot-entry "systemctl" nil t)
+(transient-define-suffix systemctl-set-reboot-entry (&optional entry)
+  "On reboot, boot the specified boot ENTRY."
   :transient 'transient--do-stay
   :inapt-if-not 'systemctl--can-reboot-entry-p
   :description (lambda ()
@@ -370,17 +437,23 @@ If ASYNC is non-nil, invoke asynchronously."
                                       nil t)))
   (systemctl--logind-manage "SetRebootToBootLoaderEntry" :async nil entry))
 
-(transient-define-prefix systemctl-boot-menu ()
+;;; Power Menu
+
+(transient-define-prefix systemctl-power-menu ()
   "Menu for managing the system's powered state."
-  ["Boot Options"
-   ("-s" systemctl--set-reboot-firmware)
-   ("-m" systemctl--set-reboot-bootloader)
-   ("-e" systemctl--set-reboot-entry)]
+  ["Reboot Options"
+   ("-s" systemctl-set-reboot-firmware)
+   ("-m" systemctl-set-reboot-bootloader)
+   ("-e" systemctl-set-reboot-entry)]
   ["Actions"
-   ("r" "Reboot" systemctl-reboot
-    :inapt-if-not systemctl--can-reboot-p)
-   ("o" "Shutdown" systemctl-poweroff
-    :inapt-if-not systemctl--can-poweroff-p)])
+   [(3 "z" systemctl-sleep)
+    (4 "h" systemctl-hibernate)
+    (5 "H" systemctl-hybrid-sleep)
+    (5 "s" systemctl-suspend)
+    (5 "S" systemctl-suspend-then-hibernate)
+    ]
+   [(3 "r" systemctl-reboot)
+    (3 "o" systemctl-poweroff)]])
 
 (provide 'systemctl)
 ;;; systemctl.el ends here
