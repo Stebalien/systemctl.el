@@ -258,15 +258,14 @@ Specify OR-RESTART to restart the unit if it cannot be reloaded."
 
 Specify MANAGER to reload `user' or `system' daemon (defaults to the value of
 `systemctl-default-manager' when nil)."
-  (interactive (list :user
-                 (pcase (read-answer
-                         "Reload the [s]ystem or [u]ser daemon? "
-                         '(("system" ?s "reload the system daemon")
-                           ("user" ?u "reload the user daemon")
-                           ("quit" ?q "abort")))
-                   ("system" nil)
-                   ("user" t)
-                   (_ (keyboard-quit)))))
+  (interactive (list (pcase (read-answer
+                             "Reload the [s]ystem or [u]ser daemon? "
+                             '(("system" ?s "reload the system daemon")
+                               ("user" ?u "reload the user daemon")
+                               ("quit" ?q "abort")))
+                       ("system" 'system)
+                       ("user" 'user)
+                       (_ (keyboard-quit)))))
   (systemctl--manage-systemd manager "Reload" 'async))
 
 (defun systemctl--manage-logind (method async &rest args)
