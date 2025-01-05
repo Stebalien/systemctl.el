@@ -5,7 +5,7 @@
 ;; Author: Steven Allen <steven@stebalien.com>
 ;; URL: https://github.com/Stebalien/systemctl.el
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "29.0"))
+;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: systemd, unix
 
 ;; This file is not part of GNU Emacs.
@@ -59,8 +59,8 @@
       (if (keywordp head) (systemctl--remove-keyword-params (cdr tail))
         (cons head (systemctl--remove-keyword-params tail))))))
 
-(cl-defun systemctl-manage (method &rest args &key user async &allow-other-keys)
-  "Invoke a systemctl management METHOD with the specified ARGS.
+(cl-defun systemctl-manage-systemd (method &rest args &key user async &allow-other-keys)
+  "Invoke a management METHOD on systemd with the specified ARGS.
 
 Specify USER to manage a user unit, and ASYNC to invoke dbus asynchronously.
 If ASYNC is a function, it'll be called when the method completes."
@@ -78,78 +78,143 @@ If ASYNC is a function, it'll be called when the method completes."
            "org.freedesktop.systemd1" "/org/freedesktop/systemd1"
            "org.freedesktop.systemd1.Manager" method args)))
 
+(defun systemctl--completion-annotation (unit)
+  "Completion annotation function used when prompting for a systemd UNIT."
+  (concat
+   (propertize " " 'display '(space :align-to center))
+   (get-text-property 0 'systemctl--unit-description unit)))
 
-(defun systemctl--list-unit-files (&optional user)
-  "List all unit files.
+(defun systemctl--completion-group (unit transform)
+  "Completion group function used when prompting for a systemd UNIT.
 
-Lists system units by default, or USER units when specified."
+If TRANSFORM is non-nil, returns the unit's basename.
+Otherwise, return a group name suitable for the unit."
+  (if transform
+      (file-name-base unit)
+    (concat (directory-file-name (file-name-directory unit))
+            ":"
+            (file-name-extension unit))))
+
+(defconst systemctl--completion-properties
+  `((group-function . ,#'systemctl--completion-group)
+    (annotation-function . ,#'systemctl--completion-annotation))
+  "Completion properties for `systemctl-read-unit' prompts.")
+
+(defun systemctl--choose-unit (prompt units)
+  "PROMPT for a unit from the given list of UNITS."
+  (let ((candidates
+         (seq-map (lambda (unit)
+                    (let ((name (car unit))
+                          (user (plist-get (cdr unit) :user))
+                          (desc (plist-get (cdr unit) :description)))
+                      (cons (propertize
+                             (concat (if user "user/" "system/") name)
+                             'systemctl--unit-description desc)
+                            unit)))
+                  units)))
+    (alist-get (completing-read prompt (completion-table-with-metadata
+                                        candidates
+                                        systemctl--completion-properties)
+                                nil t)
+               candidates
+               nil nil #'string=)))
+
+(defun systemctl--parse-filter (filter)
+  "Parse FILTER into an alist with the keys `user' `system' and `patterns'."
+  (cl-loop with user-only and system-only
+           for elt in filter
+           if (eq elt 'user)
+             do (setq user-only t)
+           else if (eq elt 'system)
+             do (setq system-only t)
+           else
+             collect (format "*.%s" elt) into patterns
+           finally return
+             `((user . ,(or user-only (not system-only)))
+               (system . ,(or system-only (not user-only)))
+               (patterns . ,patterns))))
+
+(defun systemctl--list-units (user patterns)
+  "List all USER or system unit files, filtering by PATTERNS if non-empty."
   (thread-last
-    (systemctl-manage "ListUnitFiles" :user user)
-    (seq-map 'car)
-    (seq-map 'file-name-nondirectory)
-    (seq-filter (lambda (i) (member (file-name-extension i) systemctl-unit-types)))
-    (seq-sort 'string-lessp)
-    (delete-consecutive-dups)
-    (seq-map (lambda (unit) (list (format "%-8s %s"
-                                     (if user "user" "system")
-                                     unit)
-                             unit :user user)))))
-
-(defun systemctl--list-units (&optional user)
-  "List all units.
-
-Lists system units matching `systemctl-unit-types' by default,
-or USER units when specified."
-  (thread-last
-    (systemctl-manage "ListUnits" :user user)
-    (seq-filter (lambda (i) (member (file-name-extension (car i)) systemctl-unit-types)))
+    (systemctl-manage-systemd "ListUnitsByPatterns"
+                              :user user
+                              '(:array) ; all states
+                              (cons :array patterns))
     (seq-map (pcase-lambda (`(,unit ,desc . ,_))
-               (list (format "%-8s %s - %s"
-                             (if user "user" "system")
-                             unit
-                             desc)
-                     unit :user user)))))
+               (list unit :user user :description desc)))))
+
+(defun systemctl--list-unit-files (user patterns)
+  "List all USER or system unit files, filtering by PATTERNS if non-empty."
+      (thread-last
+        (systemctl-manage-systemd "ListUnitFilesByPatterns"
+                                  :user user
+                                  '(:array) ; all states
+                                  (cons :array patterns))
+        (seq-map 'car)
+        (seq-map 'file-name-nondirectory)
+        (seq-sort 'string-lessp)
+        (delete-consecutive-dups)
+        (seq-map (lambda (unit) (list unit :user user)))))
+
+(defun systemctl-read-unit (&optional prompt &rest filter)
+  "Prompt for a unit (limited to loaded units).
+
+PROMPT is a string to prompt with.
+FILTER limits the units to prompt for. It can contain:
+- Any number of symbols/strings limiting the shown unit types (service,
+  timer, etc.).
+- The symbols `user' and/or `system'. If only one of these is specified,
+  only the specifie units (user or system) will be shown. By default,all
+  units (both user and system) are shown."
+  (let-alist (systemctl--parse-filter filter)
+    (cl-destructuring-bind (name &key user &allow-other-keys)
+        (systemctl--choose-unit (or prompt "Unit: ")
+                                (append (when .user (systemctl--list-units t .patterns))
+                                        (when .system (systemctl--list-units nil .patterns))))
+      (list name :user user))))
+
+
+(defun systemctl-read-unit-file (&optional prompt &rest filter)
+  "Prompt for a file (all known units).
+The user will be asked to fill in any templates.
+
+PROMPT is a string to prompt with.
+FILTER limits the units to prompt for. It can contain:
+- Any number of symbols/strings limiting the shown unit types (service,
+  timer, etc.).
+- The symbols `user' and/or `system'. If only one of these is specified,
+  only the specifie units (user or system) will be shown. By default,all
+  units (both user and system) are shown."
+  (let-alist (systemctl--parse-filter filter)
+    (let* ((units
+            (append (when .user (systemctl--list-unit-files t .patterns))
+                    (when .system (systemctl--list-unit-files nil .patterns))))
+           (unit (systemctl--choose-unit (or prompt "Unit file: ") units)))
+    (when (string-suffix-p "@" (file-name-base (car unit)))
+      (with-temp-buffer
+        (call-process "systemd-escape" nil t nil
+                      "--template"
+                      (car unit)
+                      (read-string "Instance: "))
+        (setcar unit (string-trim (buffer-string)))))
+    unit)))
 
 ;;;###autoload
 (cl-defun systemctl-start (unit &key user)
   "Start a UNIT.
 
 Specify USER to manage a user unit."
-  (interactive (systemctl--prompt-unit-file "Start Service: "))
-  (systemctl-manage "StartUnit" unit "replace" :user user :async t))
-
-(defun systemctl--prompt-unit (prompt)
-  "Prompt for a unit (limited to loaded units).
-
-PROMPT is a string to prompt with.
-Bind or customize `systemctl-unit-types' to limit the allowed unit types."
-  (let ((units (append (systemctl--list-units t) (systemctl--list-units nil))))
-    (cdr (assoc (completing-read prompt units nil t) units))))
-
-(defun systemctl--prompt-unit-file (prompt)
-  "Prompt for a unit file (all known units).
-
-PROMPT is a string to prompt with.
-Bind or customize `systemctl-unit-types' to limit the allowed unit types."
-  (let* ((units (append (systemctl--list-unit-files t) (systemctl--list-unit-files nil)))
-         (tuple (cdr (assoc (completing-read prompt units nil t) units))))
-    (if (string-suffix-p "@" (file-name-base (car tuple)))
-        (cons (with-temp-buffer
-                (call-process "systemd-escape" nil t nil
-                              "--template"
-                              (car tuple)
-                              (read-string "Instance: "))
-                (string-trim (buffer-string)))
-              (cdr tuple))
-      tuple)))
+  (interactive (apply #'systemctl-read-unit-file "Start Service: " systemctl-unit-types))
+  (systemctl-manage-systemd "StartUnit" unit "replace" :user user :async t))
 
 ;;;###autoload
 (cl-defun systemctl-stop (unit &key user)
   "Start a systemd UNIT.
 
 Specify USER to restart a user unit."
-  (interactive (systemctl--prompt-unit "Stop Service: "))
-  (systemctl-manage "StopUnit" unit "replace" :user user :async t))
+  (interactive (apply #'systemctl-read-unit "Stop Service: " systemctl-unit-types))
+  (systemctl-manage-systemd "StopUnit" unit "replace" :user user :async t))
 
 ;;;###autoload
 (cl-defun systemctl-restart (unit &key user try)
@@ -157,8 +222,8 @@ Specify USER to restart a user unit."
 
 Specify USER to restart a user unit.
 Specify TRY to try to restart the unit, if and only if it's already running."
-  (interactive (systemctl--prompt-unit "Restart Service: "))
-  (systemctl-manage
+  (interactive (apply #'systemctl-read-unit "Restart Service: " systemctl-unit-types))
+  (systemctl-manage-systemd
    (if try "TryRestartUnit" "RestartUnit")
    :user user
    :async t
@@ -170,8 +235,8 @@ Specify TRY to try to restart the unit, if and only if it's already running."
 
 Specify USER to reload a user unit.
 Specify OR-RESTART to restart the unit if it cannot be reloaded."
-  (interactive (systemctl--prompt-unit "Reload Service: "))
-  (systemctl-manage
+  (interactive (apply #'systemctl-read-unit "Reload Service: " systemctl-unit-types))
+  (systemctl-manage-systemd
    (pcase or-restart
      ('t "ReloadOrRestartUnit")
      ('try "ReloadOrTryRestartUnit")
@@ -186,10 +251,18 @@ Specify OR-RESTART to restart the unit if it cannot be reloaded."
   "Reload the systemd configuration.
 
 Specify USER to reload the configuration of the user daemon."
-  (interactive)
-  (systemctl-manage "Reload" :user user :async t))
+  (interactive (list :user
+                 (pcase (read-answer
+                         "Reload the [s]ystem or [u]ser daemon? "
+                         '(("system" ?s "reload the system daemon")
+                           ("user" ?u "reload the user daemon")
+                           ("quit" ?q "abort")))
+                   ("system" nil)
+                   ("user" t)
+                   (_ (keyboard-quit)))))
+  (systemctl-manage-systemd "Reload" :user user :async t))
 
-(cl-defun systemctl--logind-manage (method &rest args &key async &allow-other-keys)
+(cl-defun systemctl-manage-logind (method &rest args &key async &allow-other-keys)
   "Invoke a management METHOD on logind with the specified ARGS.
 
 If ASYNC is non-nil, invoke asynchronously."
@@ -222,8 +295,8 @@ If ASYNC is non-nil, invoke asynchronously."
                     :system "org.freedesktop.login1"
                     "/org/freedesktop/login1/session/auto"
                     "org.freedesktop.login1.Session" action nil))
-   ((eq session t) (systemctl--logind-manage (concat action "Sessions")))
-   ((stringp session) (systemctl--logind-manage (concat action "Session") session))
+   ((eq session t) (systemctl-manage-logind (concat action "Sessions")))
+   ((stringp session) (systemctl-manage-logind (concat action "Session") session))
    (t (error "Invalid `session' argument"))))
 
 ;;;###autoload
@@ -242,7 +315,7 @@ If ASYNC is non-nil, invoke asynchronously."
 
 (defun systemctl--can-suspend-p ()
   "Check if system can suspend."
-  (string= "yes" (systemctl--logind-manage "CanSuspend")))
+  (string= "yes" (systemctl-manage-logind "CanSuspend")))
 
 ;;;###autoload(autoload 'systemctl-suspend "systemctl" nil t)
 (transient-define-suffix systemctl-suspend ()
@@ -250,13 +323,13 @@ If ASYNC is non-nil, invoke asynchronously."
   :description "Suspend"
   :inapt-if-not 'systemctl--can-suspend-p
   (interactive)
-  (systemctl--logind-manage "Suspend" t))
+  (systemctl-manage-logind "Suspend" t))
 
 ;;; Hibernate
 
 (defun systemctl--can-hibernate-p ()
   "Check if system can hibernate."
-  (string= "yes" (systemctl--logind-manage "CanHibernate")))
+  (string= "yes" (systemctl-manage-logind "CanHibernate")))
 
 ;;;###autoload(autoload 'systemctl-hibernate "systemctl" nil t)
 (transient-define-suffix systemctl-hibernate ()
@@ -264,13 +337,13 @@ If ASYNC is non-nil, invoke asynchronously."
   :description "Hibernate"
   :inapt-if-not 'systemctl--can-hibernate-p
   (interactive)
-  (systemctl--logind-manage "Hibernate" t))
+  (systemctl-manage-logind "Hibernate" t))
 
 ;;; Hybrid-sleep
 
 (defun systemctl--can-hybrid-sleep-p ()
   "Check if system can hybrid-sleep."
-  (string= "yes" (systemctl--logind-manage "CanHybridSleep")))
+  (string= "yes" (systemctl-manage-logind "CanHybridSleep")))
 
 ;;;###autoload(autoload 'systemctl-hybrid-sleep "systemctl" nil t)
 (transient-define-suffix systemctl-hybrid-sleep ()
@@ -278,13 +351,13 @@ If ASYNC is non-nil, invoke asynchronously."
   :description "Hybrid sleep (suspend to both)"
   :inapt-if-not 'systemctl--can-hybrid-sleep-p
   (interactive)
-  (systemctl--logind-manage "HybridSleep" t))
+  (systemctl-manage-logind "HybridSleep" t))
 
 ;;; Suspend then hibernate
 
 (defun systemctl--can-suspend-then-hibernate-p ()
   "Check if system can suspend-then-hibernate."
-  (string= "yes" (systemctl--logind-manage "CanSuspendThenHibernate")))
+  (string= "yes" (systemctl-manage-logind "CanSuspendThenHibernate")))
 
 ;;;###autoload(autoload 'systemctl-suspend-then-hibernate "systemctl" nil t)
 (transient-define-suffix systemctl-suspend-then-hibernate ()
@@ -292,13 +365,13 @@ If ASYNC is non-nil, invoke asynchronously."
   :description "Suspend Then Hibernate"
   :inapt-if-not 'systemctl--can-suspend-then-hibernate-p
   (interactive)
-  (systemctl--logind-manage "SuspendThenHibernate" t))
+  (systemctl-manage-logind "SuspendThenHibernate" t))
 
 ;;; Sleep
 
 (defun systemctl--can-sleep-p ()
   "Check if system can sleep (using the default method)."
-  (string= "yes" (systemctl--logind-manage "CanSleep")))
+  (string= "yes" (systemctl-manage-logind "CanSleep")))
 
 (defconst systemctl--sleep-actions
   '(("suspend-then-hibernate" . systemctl--can-suspend-then-hibernate-p)
@@ -320,11 +393,13 @@ If ASYNC is non-nil, invoke asynchronously."
   :description (lambda () (format "Sleep (%s)" (or (systemctl--get-sleep-operation) "none")))
   :inapt-if-not 'systemctl--can-sleep-p
   (interactive)
-  (systemctl--logind-manage "Sleep" t))
+  (systemctl-manage-logind "Sleep" t))
+
+;;; Poweroff
 
 (defun systemctl--can-poweroff-p ()
   "Check if system can poweroff."
-  (string= "yes" (systemctl--logind-manage "CanPowerOff")))
+  (string= "yes" (systemctl-manage-logind "CanPowerOff")))
 
 ;;;###autoload(autoload 'systemctl-poweroff "systemctl" nil t)
 (transient-define-suffix systemctl-poweroff ()
@@ -332,13 +407,13 @@ If ASYNC is non-nil, invoke asynchronously."
   :description "Shutdown"
   :inapt-if-not 'systemctl--can-poweroff-p
   (interactive)
-  (systemctl--logind-manage "PowerOff" t))
+  (systemctl-manage-logind "PowerOff" t))
 
 ;;; Reboot
 
 (defun systemctl--can-reboot-p ()
   "Check if system can reboot."
-  (string= "yes" (systemctl--logind-manage "CanReboot")))
+  (string= "yes" (systemctl-manage-logind "CanReboot")))
 
 ;;;###autoload(autoload 'systemctl-reboot "systemctl" nil t)
 (transient-define-suffix systemctl-reboot ()
@@ -346,13 +421,27 @@ If ASYNC is non-nil, invoke asynchronously."
   :description "Reboot"
   :inapt-if-not 'systemctl--can-reboot-p
   (interactive)
-  (systemctl--logind-manage "Reboot" t))
+  (systemctl-manage-logind "Reboot" t))
+
+;;; Halt
+
+(defun systemctl--can-halt-p ()
+  "Check if system can poweroff."
+  (string= "yes" (systemctl-manage-logind "CanHalt")))
+
+;;;###autoload(autoload 'systemctl-poweroff "systemctl" nil t)
+(transient-define-suffix systemctl-halt ()
+  "Shut down but don't power off the system."
+  :description "Halt"
+  :inapt-if-not 'systemctl--can-halt-p
+  (interactive)
+  (systemctl-manage-logind "Halt" t))
 
 ;;; Reboot to firmware
 
 (defun systemctl--can-reboot-firmware-p ()
   "Check if system can reboot to firmware."
-  (string= "yes" (systemctl--logind-manage "CanRebootToFirmwareSetup")))
+  (string= "yes" (systemctl-manage-logind "CanRebootToFirmwareSetup")))
 
 (defun systemctl--get-reboot-firmware ()
   "Check if system can reboot to firmware."
@@ -370,13 +459,13 @@ When called interactively, entry into the firmware setup is toggled."
                              (propertize "on" 'face 'transient-value)
                            (propertize "off" 'face 'transient-inactive-value))))
   (interactive (list (not (systemctl--get-reboot-firmware))))
-  (systemctl--logind-manage "SetRebootToFirmwareSetup" :async nil enable))
+  (systemctl-manage-logind "SetRebootToFirmwareSetup" :async nil enable))
 
 ;;; Reboot to bootloader
 
 (defun systemctl--can-reboot-bootloader-p ()
   "Check if system can reboot to bootloader menu."
-  (string= "yes" (systemctl--logind-manage "CanRebootToBootLoaderMenu")))
+  (string= "yes" (systemctl-manage-logind "CanRebootToBootLoaderMenu")))
 
 (defun systemctl--get-reboot-bootloader ()
   "Check if system can reboot to firmware."
@@ -395,13 +484,13 @@ When called interactively, entry into the firmware setup is toggled."
                            (propertize "off" 'face 'transient-inactive-value))))
   (interactive (list (xor (systemctl--get-reboot-bootloader)
                           (read-string "Timeout (seconds) [5]: " nil nil 5))))
-  (systemctl--logind-manage "RebootToBootLoaderMenu" :async nil timeout))
+  (systemctl-manage-logind "RebootToBootLoaderMenu" :async nil timeout))
 
 ;;; Set next boot
 
 (defun systemctl--can-reboot-entry-p ()
   "Check if system can reboot to bootloader entries."
-  (string= "yes" (systemctl--logind-manage "CanRebootToBootLoaderEntry")))
+  (string= "yes" (systemctl-manage-logind "CanRebootToBootLoaderEntry")))
 
 (defun systemctl--get-reboot-entry ()
   "Get the active bootloader entry."
@@ -422,7 +511,7 @@ When called interactively, entry into the firmware setup is toggled."
   (interactive (list (completing-read "Boot Next: "
                                       (systemctl--logind-property "BootLoaderEntries")
                                       nil t)))
-  (systemctl--logind-manage "SetRebootToBootLoaderEntry" :async nil entry))
+  (systemctl-manage-logind "SetRebootToBootLoaderEntry" :async nil entry))
 
 ;;; Power Menu
 
