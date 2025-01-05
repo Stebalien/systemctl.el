@@ -519,6 +519,7 @@ When called interactively, entry into the firmware setup is toggled."
 
 ;;; Power Menu
 
+;;;###autoload(autoload 'systemctl-power-menu "systemctl" nil t)
 (transient-define-prefix systemctl-power-menu ()
   "Menu for managing the system's powered state."
   ["Actions"
