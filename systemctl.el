@@ -42,11 +42,11 @@
 (defgroup systemctl nil
   "Systemd control utilities."
   :version "0.0.1"
+  :prefix "systemctl-"
   :group 'tools)
 
 (defcustom systemctl-unit-types '("service" "timer")
   "Systemd unit types to display in completion."
-  :group 'systemctl
   :version "0.0.1"
   :type '(choice (const :tag "All" nil)
                  (repeat :tag "Unit Types" string)))
