@@ -51,12 +51,6 @@
   :type '(choice (const :tag "All" nil)
                  (repeat :tag "Unit Types" string)))
 
-(defcustom systemctl-default-manager 'system
-  "The default daemon manager to operate on (user or system)."
-  :version "0.0.1"
-  :type '(choice (const :tag "System" system)
-                 (const :tag "User" user)))
-
 (defun systemctl--remove-keyword-params (seq)
   "Remove all keyword/value pairs from SEQ."
   (if (null seq) nil
@@ -68,8 +62,7 @@
 (defun systemctl--manage-systemd (manager method async &rest args)
   "Invoke a management METHOD on systemd with the specified ARGS.
 
-MANAGER specifies the manager to operate on (or nil to operate on the default
-as specified by `systemctl-default-manager').
+MANAGER specifies the manager to operate on.
 If ASYNC is non-nil, Emacs won't wait for a response and will return
 immediately.
 If ASYNC is a function, it'll be called when the method completes."
@@ -78,8 +71,8 @@ If ASYNC is a function, it'll be called when the method completes."
   (when async
     (push (and (functionp async) async) args))
   (apply (if async #'dbus-call-method-asynchronously #'dbus-call-method)
-         (pcase (or manager systemctl-default-manager)
-           ('system :system)
+         (pcase manager
+           ((or 'system 'nil) :system)
            ('user :session)
            (other (error "Invalid systemd manager selection: %S" other)))
          "org.freedesktop.systemd1" "/org/freedesktop/systemd1"
@@ -143,8 +136,7 @@ Otherwise, return a group name suitable for the unit."
 
 (defun systemctl--list-units (manager patterns)
   "List all unit files belonging to MANAGER, filtering by PATTERNS if non-empty.
-MANAGER is one of `system', `user', or nil."
-  (unless manager (setq manager systemctl-default-manager))
+MANAGER is one of `system' or `user'."
   (thread-last
     (systemctl--manage-systemd manager "ListUnitsByPatterns" nil
                                '(:array) ; all states
@@ -154,17 +146,16 @@ MANAGER is one of `system', `user', or nil."
 
 (defun systemctl--list-unit-files (manager patterns)
   "List all unit files belonging to MANAGER, filtering by PATTERNS if non-empty.
-MANAGER is one of `system', `user', or nil."
-  (unless manager (setq manager systemctl-default-manager))
-      (thread-last
-        (systemctl--manage-systemd manager "ListUnitFilesByPatterns" nil
-                                  '(:array) ; all states
-                                  (cons :array patterns))
-        (seq-map 'car)
-        (seq-map 'file-name-nondirectory)
-        (seq-sort 'string-lessp)
-        (delete-consecutive-dups)
-        (seq-map (lambda (unit) (list unit manager)))))
+MANAGER is one of `system' or `user'."
+  (thread-last
+    (systemctl--manage-systemd manager "ListUnitFilesByPatterns" nil
+                               '(:array) ; all states
+                               (cons :array patterns))
+    (seq-map 'car)
+    (seq-map 'file-name-nondirectory)
+    (seq-sort 'string-lessp)
+    (delete-consecutive-dups)
+    (seq-map (lambda (unit) (list unit manager)))))
 
 (defun systemctl-read-unit (&optional prompt &rest filter)
   "Prompt for a unit (limited to loaded units).
@@ -209,55 +200,56 @@ FILTER limits the units to prompt for. It can contain:
 
 ;;;###autoload
 (defun systemctl-start (unit &optional manager)
-  "Start a UNIT.
-
-Specify MANAGER to manage `user' or `system' units (defaults to the value of
-`systemctl-default-manager')."
-  (interactive (apply #'systemctl-read-unit-file "Start Service: " systemctl-unit-types))
+  "Start a UNIT on MANAGER (`user' or `system' (default))."
+  (interactive (apply #'systemctl-read-unit-file "Start: " systemctl-unit-types))
   (systemctl--manage-systemd manager "StartUnit" 'async unit "replace"))
 
 ;;;###autoload
 (defun systemctl-stop (unit &optional manager)
-  "Start a systemd UNIT.
-
-Specify MANAGER to manage `user' or `system' units (defaults to the value of
-`systemctl-default-manager')."
-  (interactive (apply #'systemctl-read-unit "Stop Service: " systemctl-unit-types))
+  "Stop a UNIT on MANAGER (`user' or `system' (default))."
+  (interactive (apply #'systemctl-read-unit "Stop: " systemctl-unit-types))
   (systemctl--manage-systemd manager "StopUnit" 'async unit "replace"))
 
 ;;;###autoload
-(defun systemctl-restart (unit &optional manager try)
-  "Restart the systemd UNIT.
-
-Specify MANAGER to manage `user' or `system' units (defaults to the value of
-`systemctl-default-manager' when nil).
-Specify TRY to try to restart the unit, if and only if it's already running."
-  (interactive (apply #'systemctl-read-unit "Restart Service: " systemctl-unit-types))
-  (systemctl--manage-systemd manager (if try "TryRestartUnit" "RestartUnit") 'async unit "replace"))
+(defun systemctl-reload (unit &optional manager)
+  "Reload a UNIT on MANAGER (`user' or `system' (default))."
+  (interactive (apply #'systemctl-read-unit "Reload: " systemctl-unit-types))
+  (systemctl--manage-systemd manager "ReloadUnit" 'async unit "replace"))
 
 ;;;###autoload
-(defun systemctl-reload (unit &optional manager or-restart)
-  "Reload the systemd UNIT.
+(defun systemctl-restart (unit &optional manager if-running)
+  "Restart a UNIT on MANAGER (`user' or `system' (default)).
+Unless IF-RUNNING is non-nil, the unit will be started if not running."
+  (interactive (append
+                (apply #'systemctl-read-unit
+                       (concat "Restart"
+                               (when current-prefix-arg " (if running)")
+                               ": ")
+                       systemctl-unit-types)
+                (list current-prefix-arg)))
+  (systemctl--manage-systemd
+   manager (if if-running "TryRestartUnit" "RestartUnit")
+   'async unit "replace"))
 
-Specify MANAGER to manage `user' or `system' units (defaults to the value of
-`systemctl-default-manager' when nil).
-Specify OR-RESTART to restart the unit if it cannot be reloaded."
-  (interactive (apply #'systemctl-read-unit "Reload Service: " systemctl-unit-types))
+;;;###autoload
+(defun systemctl-reload-or-restart (unit &optional manager if-running)
+  "Reload or restart a UNIT on MANAGER (`user' or `system' (default)).
+Unless IF-RUNNING is non-nil, the unit will be started if not running."
+  (interactive (append
+                (apply #'systemctl-read-unit
+                       (concat "Reload or restart"
+                               (when current-prefix-arg " (if running)")
+                               ": ")
+                       systemctl-unit-types)
+                (list current-prefix-arg)))
   (systemctl--manage-systemd
    manager
-   (pcase or-restart
-     ('t "ReloadOrRestartUnit")
-     ('try "ReloadOrTryRestartUnit")
-     ('nil "ReloadUnit")
-     (_ (error "`or-restart' must either be `t', `'try', or `nil'")))
+   (if if-running "ReloadOrTryRestartUnit" "ReloadOrRestartUnit")
    'async unit "replace"))
 
 ;;;###autoload
 (defun systemctl-daemon-reload (&optional manager)
-  "Reload the systemd configuration.
-
-Specify MANAGER to reload `user' or `system' daemon (defaults to the value of
-`systemctl-default-manager' when nil)."
+  "Reload the systemd configuration on MANAGER (`user' or `system' (default))."
   (interactive (list (pcase (read-answer
                              "Reload the [s]ystem or [u]ser daemon? "
                              '(("system" ?s "reload the system daemon")
@@ -305,13 +297,15 @@ If ASYNC is non-nil, invoke asynchronously.
 
 ;;;###autoload
 (defun systemctl-lock (&optional session)
-  "Lock the current or specified SESSION."
+  "Lock the current or specified SESSION.
+If SESSION is t, lock all sessions (requires authentication)."
   (interactive)
   (systemctl--lock-unlock-common "Lock" session))
 
 ;;;###autoload
 (defun systemctl-unlock (&optional session)
-  "Lock the current or specified SESSION."
+  "Unlock the current or specified SESSION.
+If SESSION is t, unlock all sessions (requires authentication)."
   (interactive)
   (systemctl--lock-unlock-common "Unlock" session))
 
