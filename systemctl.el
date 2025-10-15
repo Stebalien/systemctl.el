@@ -473,7 +473,7 @@ When called interactively, entry into the firmware setup is toggled."
 ;;;###autoload(autoload 'systemctl-set-reboot-bootloader "systemctl" nil t)
 (transient-define-suffix systemctl-set-reboot-bootloader (&optional timeout)
   "On reboot, pause in the bootloader for TIMEOUT seconds."
-  :transient 'transient--do-stay
+  :transient t
   :inapt-if-not 'systemctl--can-reboot-bootloader-p
   :description (lambda ()
                  (format "Show boot menu (%s)"
@@ -499,7 +499,7 @@ When called interactively, entry into the firmware setup is toggled."
 ;;;###autoload(autoload 'systemctl-set-reboot-entry "systemctl" nil t)
 (transient-define-suffix systemctl-set-reboot-entry (&optional entry)
   "On reboot, boot the specified boot ENTRY."
-  :transient 'transient--do-stay
+  :transient t
   :inapt-if-not 'systemctl--can-reboot-entry-p
   :description (lambda ()
                  (format "Reboot to entry (%s)"
