@@ -526,9 +526,9 @@ When called interactively, entry into the firmware setup is toggled."
    [(3 "r" systemctl-reboot)
     (3 "o" systemctl-poweroff)]]
   ["On next reboot..."
-   ("-s" systemctl-set-reboot-firmware)
-   ("-m" systemctl-set-reboot-bootloader)
-   ("-e" systemctl-set-reboot-entry)])
+   (4 "-s" systemctl-set-reboot-firmware)
+   (4 "-m" systemctl-set-reboot-bootloader)
+   (4 "-e" systemctl-set-reboot-entry)])
 
 (provide 'systemctl)
 ;;; systemctl.el ends here
