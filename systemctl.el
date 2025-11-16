@@ -150,7 +150,7 @@ Otherwise, return a group name suitable for the unit."
                (patterns . ,patterns))))
 
 (defun systemctl--list-units (manager patterns)
-  "List all unit files belonging to MANAGER, filtering by PATTERNS if non-empty.
+  "List all loaded units belonging to MANAGER, filtering by PATTERNS if non-empty.
 MANAGER is one of `system' or `user'."
   (thread-last
     (systemctl--manage-systemd manager "ListUnitsByPatterns" nil
@@ -170,7 +170,21 @@ MANAGER is one of `system' or `user'."
     (seq-map 'file-name-nondirectory)
     (seq-sort 'string-lessp)
     (delete-consecutive-dups)
-    (seq-map (lambda (unit) (list unit manager)))))
+    (seq-map (lambda (unit) (list unit manager "[unloaded]")))))
+
+(defun systemctl--list-all-units (manager patterns)
+  "List all units belonging to MANAGER, filtering by PATTERNS if non-empty.
+MANAGER is one of `system' or `user'."
+  (thread-last
+   (append
+    (systemctl--list-units manager patterns)
+    (systemctl--list-unit-files manager patterns))
+   (seq-sort (lambda (a b) (string-lessp (car a) (car b))))
+   (seq-remove
+    (let (prev)
+      (lambda (item)
+        (prog1 (string= (car prev) (car item))
+          (setq prev item)))))))
 
 (defun systemctl-read-unit (&optional prompt &rest filter)
   "Prompt for a unit (limited to loaded units).
@@ -201,8 +215,8 @@ FILTER limits the units to prompt for. It can contain:
   units (both user and system) are shown."
   (let-alist (systemctl--parse-filter filter)
     (let* ((units
-            (append (when .user (systemctl--list-unit-files 'user .patterns))
-                    (when .system (systemctl--list-unit-files 'system .patterns))))
+            (append (when .user (systemctl--list-all-units 'user .patterns))
+                    (when .system (systemctl--list-all-units 'system .patterns))))
            (unit (systemctl--choose-unit (or prompt "Unit file: ") units)))
     (when (string-suffix-p "@" (file-name-base (car unit)))
       (with-temp-buffer
