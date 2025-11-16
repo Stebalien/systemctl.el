@@ -478,7 +478,8 @@ When called interactively, entry into the firmware setup is toggled."
   :description (lambda ()
                  (format "Show boot menu (%s)"
                          (if-let* ((timeout (systemctl--get-reboot-bootloader)))
-                             (propertize (format "%ds" timeout) 'face 'transient-value)
+                             (propertize (seconds-to-string timeout 'expanded t)
+                                         'face 'transient-value)
                            (propertize "off" 'face 'transient-inactive-value))))
   (interactive (list (xor (systemctl--get-reboot-bootloader)
                           (read-string "Timeout (seconds) [5]: " nil nil 5))))
