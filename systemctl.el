@@ -45,11 +45,22 @@
   :prefix "systemctl-"
   :group 'tools)
 
-(defcustom systemctl-unit-types '("service" "timer")
+(defconst systemctl--unit-types
+  '( service mount swap socket target device automount timer path slice
+     scope )
+  "Systemd unit types.")
+
+(defcustom systemctl-unit-types '(service timer)
   "Systemd unit types to display in completion."
   :version "0.0.1"
-  :type '(choice (const :tag "All" nil)
-                 (repeat :tag "Unit Types" string)))
+  :type
+  `(choice
+    (const :tag "All" t)
+    (set :tag "Unit Types"
+         ,@(mapcar
+            (lambda (type)
+              `(const :tag ,(capitalize (symbol-name type)) ,type))
+            systemctl--unit-types))))
 
 (defun systemctl--remove-keyword-params (seq)
   "Remove all keyword/value pairs from SEQ."
@@ -127,8 +138,12 @@ Otherwise, return a group name suitable for the unit."
              do (setq user-only t)
            else if (eq elt 'system)
              do (setq system-only t)
-           else
+           else if (stringp elt)
+             collect elt into patterns
+           else if (memq elt systemctl--unit-types)
              collect (format "*.%s" elt) into patterns
+           else
+             do (error "Unknown filter %S" elt)
            finally return
              `((user . ,(or user-only (not system-only)))
                (system . ,(or system-only (not user-only)))
