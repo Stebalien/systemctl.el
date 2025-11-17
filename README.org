@@ -1,11 +1,9 @@
-* systemctl.el
-:PROPERTIES:
-:ID:       f37d4b4e-e80d-4c39-be61-4aab82dfa4ff
-:END:
+#+TITLE: systemctl.el
+#+LINK: man https://man.he.net/?topic=%s&section=all
 
 An Emacs package for controlling [[https://systemd.io/][systemd]] over [[https://www.freedesktop.org/wiki/Software/dbus/][D-Bus]].
 
-** Power Menu
+* Power Menu
 :PROPERTIES:
 :ID:       b48585ab-aac7-4b69-9a44-e61f41d07267
 :END:
@@ -33,7 +31,7 @@ If transient menus aren't your style, all power commands can also be invoked as 
 
 They correspond to the same commands as defined on the [[man:systemctl(1)][systemctl(1)]] shell command.
 
-** Session Locking
+* Session Locking
 :PROPERTIES:
 :ID:       0cf357d6-9af2-47ba-bf17-628a7abb5fe2
 :END:
@@ -45,7 +43,7 @@ This package implements two commands from the [[man:loginctl(1)][loginctl(1)]] s
 
 I haven't implemented any of the other [[man:loginctl(1)][loginctl(1)]] commands at the moment but I'm open to suggestions.
 
-** Service Management
+* Service Management
 :PROPERTIES:
 :ID:       b2fff18d-3cc7-4afa-a912-423e56fcdc35
 :END:
@@ -58,7 +56,7 @@ Finally, as expected of a ~systemctl~ package, you can manage systemd services:
 - ~systemctl-reload-or-restart~ reloads the config of a running service, or restarts it. If the service isn't running, it's started unless called with a prefix argument.
 - ~systemctl-reload~ tells a running service to reload its config. You likely want to use ~systemctl-reload-or-restart~ instead as that will handle restarted services that can't be reloaded.
 
-** Reloading Units & Systemd
+* Reloading Units & Systemd
 :PROPERTIES:
 :ID:       f25f4dbc-6e70-4aa9-938a-14da7f1f9140
 :END:
