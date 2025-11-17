@@ -1,4 +1,4 @@
-;;; systemctl.el --- Systemctl -*- lexical-binding: t -*-
+;;; systemctl.el --- Control systemd over D-Bus -*- lexical-binding: t -*-
 
 ;; Copyright 2020 Steven Allen <steven@stebalien.com>
 
@@ -27,13 +27,10 @@
 
 ;;; Commentary:
 
-;; An Emacs package for controlling systemd over dbus.
-
-;;; Requirements:
-
-;; Emacs 27.0.0
+;; This package manages systemd services, power, etc. over D-Bus.
 
 ;;; Code:
+
 (require 'transient)
 (require 'dbus)
 
