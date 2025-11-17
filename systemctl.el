@@ -111,9 +111,9 @@ second argument is the return-value."
   "Invoke a management METHOD on systemd with the specified ARGS.
 
 MANAGER specifies the manager to operate on.
-If ASYNC is non-nil, Emacs won't wait for a response and will return
-immediately.
-If ASYNC is a function, it'll be called when the method completes.
+
+If ASYNC is non-nil, don't wait for a response and return immediately.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success or, an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE)."
@@ -512,11 +512,15 @@ list of strings: (OPERATION FROM TO)."
 (defun systemctl--manage-logind (method async &rest args)
   "Invoke a management METHOD on logind with the specified ARGS.
 
-If ASYNC is non-nil, invoke asynchronously."
+If ASYNC is non-nil, don't wait for a response and return immediately.
+If ASYNC is a function, it will be called when the method completes.
+The first argument will be nil on success or, an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE)."
   (when (and (not noninteractive) (version<= "31.0" emacs-version))
     (setq args (cons :authorizable (cons t args))))
   (when async
-    (push (and (functionp async) async) args))
+    (push (and (functionp async) (systemctl--make-dbus-callback async)) args))
   (apply (if async #'dbus-call-method-asynchronously #'dbus-call-method)
          :system "org.freedesktop.login1"
          "/org/freedesktop/login1"
@@ -531,30 +535,52 @@ If ASYNC is non-nil, invoke asynchronously."
 
 ;;; Lock/Unlock
 
-(defun systemctl--lock-unlock-common (action &optional session)
+(defun systemctl--lock-unlock-common (action session async)
   "Lock or Unlock (ACTION) the specified SESSION."
   (cond
-   ((null session) (dbus-call-method-asynchronously
-                    :system "org.freedesktop.login1"
-                    "/org/freedesktop/login1/session/auto"
-                    "org.freedesktop.login1.Session" action nil))
-   ((eq session t) (systemctl--manage-logind (concat action "Sessions") 'async))
-   ((stringp session) (systemctl--manage-logind (concat action "Session") 'async session))
+   ((null session)
+    (if async
+        (dbus-call-method-asynchronously
+         :system "org.freedesktop.login1"
+         "/org/freedesktop/login1/session/auto"
+         "org.freedesktop.login1.Session" action
+         (when (functionp async)
+           (systemctl--make-dbus-callback async)))
+      (dbus-call-method
+       :system "org.freedesktop.login1"
+       "/org/freedesktop/login1/session/auto"
+       "org.freedesktop.login1.Session" action)))
+   ((eq session t) (systemctl--manage-logind (concat action "Sessions") async))
+   ((stringp session) (systemctl--manage-logind (concat action "Session") async session))
    (t (error "Invalid `session' argument"))))
 
 ;;;###autoload
-(defun systemctl-lock (&optional session)
+(defun systemctl-lock (&optional session async)
   "Lock the current or specified SESSION.
-If SESSION is t, lock all sessions (requires authentication)."
+If SESSION is t, lock all sessions (requires authentication).
+
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the nil or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings."
   (interactive)
-  (systemctl--lock-unlock-common "Lock" session))
+  (systemctl--lock-unlock-common "Lock" session async))
 
 ;;;###autoload
-(defun systemctl-unlock (&optional session)
+(defun systemctl-unlock (&optional session async)
   "Unlock the current or specified SESSION.
-If SESSION is t, unlock all sessions (requires authentication)."
+If SESSION is t, unlock all sessions (requires authentication).
+
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the nil or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings."
   (interactive)
-  (systemctl--lock-unlock-common "Unlock" session))
+  (systemctl--lock-unlock-common "Unlock" session async))
 
 ;;; Suspend
 
