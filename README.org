@@ -1,0 +1,66 @@
+* systemctl.el
+:PROPERTIES:
+:ID:       f37d4b4e-e80d-4c39-be61-4aab82dfa4ff
+:END:
+
+An Emacs package for controlling [[https://systemd.io/][systemd]] over [[https://www.freedesktop.org/wiki/Software/dbus/][D-Bus]].
+
+** Power Menu
+:PROPERTIES:
+:ID:       b48585ab-aac7-4b69-9a44-e61f41d07267
+:END:
+
+This package includes a [[https://github.com/magit/transient][transient]]-based power menu (~systemctl-power-menu~):
+
+#+caption: power-menu
+[[file:screenshots/power-menu.png]]
+
+In addition to the usual commands (sleep, reboot, shutdown, etc.):
+
+- You can reboot into the firmware setup or even a specific operating system/kernel if your boot manager supports it. All unsupported features will be grayed out as in the above screenshot.
+- If you increase the transient verbosity level (bound to =C-x a= in all transients by default), you can enter specific suspend states beyond the default "sleep" and "hibernate" options.
+
+If transient menus aren't your style, all power commands can also be invoked as regular commands via =M-x= or bound to via keybindings (although none are defined by default). These commands are:
+
+- ~systemctl-suspend~
+- ~systemctl-hibernate~
+- ~systemctl-hybrid-sleep~
+- ~systemctl-suspend-then-hibernate~
+- ~systemctl-sleep~
+- ~systemctl-poweroff~
+- ~systemctl-reboot~
+- ~systemctl-halt~ (you probably want ~systemctl-poweroff~, not ~systemctl-halt~)
+
+They correspond to the same commands as defined on the [[man:systemctl(1)][systemctl(1)]] shell command.
+
+** Session Locking
+:PROPERTIES:
+:ID:       0cf357d6-9af2-47ba-bf17-628a7abb5fe2
+:END:
+
+This package implements two commands from the =loginctl(1)= shell command for locking/unlocking sessions. They don't precisely belong in a ~systemctl~ package but they're useful enough to include.
+
+- ~systemd-lock~ locks the current session, the target session when called with a session ID (may require polkit authentication), or all sessions when called with the symbol ~t~ (requires polkit authentication).
+- ~systemctl-unlock~ is the inverse of ~systemctl-lock~.
+
+I haven't implemented any of the other [[man:loginctl(1)][loginctl(1)]] commands at the moment but I'm open to suggestions.
+
+** Service Management
+:PROPERTIES:
+:ID:       b2fff18d-3cc7-4afa-a912-423e56fcdc35
+:END:
+
+Finally, as expected of a ~systemctl~ package, you can manage systemd services:
+
+- ~systemctl-start~ starts a unit (service, timer, etc.), prompting for one if called interactively.
+- ~systemctl-stop~ stops a service.
+- ~systemctl-restart~ starts or restarts a service. Only restarts already running services when called with a prefix arg.
+- ~systemctl-reload-or-restart~ reloads the config of a running service, or restarts it. If the service isn't running, it's started unless called with a prefix argument.
+- ~systemctl-reload~ tells a running service to reload its config. You likely want to use ~systemctl-reload-or-restart~ instead as that will handle restarted services that can't be reloaded.
+
+** Reloading Units & Systemd
+:PROPERTIES:
+:ID:       f25f4dbc-6e70-4aa9-938a-14da7f1f9140
+:END:
+
+You can reload the systemd daemon's config, unit files, etc. by calling ~systemctl-daemon-reload~.
