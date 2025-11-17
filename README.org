@@ -54,6 +54,12 @@ Finally, as expected of a ~systemctl~ package, you can manage systemd services:
 - ~systemctl-restart~ starts or restarts a service. Only restarts already running services when called with a prefix arg.
 - ~systemctl-reload-or-restart~ reloads the config of a running service, or restarts it. If the service isn't running, it's started unless called with a prefix argument.
 - ~systemctl-reload~ tells a running service to reload its config. You likely want to use ~systemctl-reload-or-restart~ instead as that will handle restarted services that can't be reloaded.
+- ~systemctl-enable~ enables a unit to start automatically at boot.
+- ~systemctl-disable~ disables a unit from starting automatically at boot.
+- ~systemctl-mask~ masks a unit, completely preventing it from being started.
+- ~systemctl-unmask~ unmasks a unit, allowing it to be started again.
+
+The enable, disable, mask, and unmask commands support a prefix argument to operate only for the current session (runtime-only changes).
 
 * Reloading Units & Systemd
 :PROPERTIES:

@@ -286,6 +286,46 @@ Unless IF-RUNNING is non-nil, the unit will be started if not running."
                        (_ (keyboard-quit)))))
   (systemctl--manage-systemd manager "Reload" 'async))
 
+;;;###autoload
+(defun systemctl-enable (unit-or-units &optional manager runtime)
+  "Enable UNIT-OR-UNITS on MANAGER (`user' or `system' (default)).
+With prefix-argument RUNTIME, enable only for this session."
+  (interactive (append
+                (apply #'systemctl-read-unit-file "Enable: " systemctl-unit-types)
+                (list current-prefix-arg)))
+  (systemctl--manage-systemd manager "EnableUnitFiles" 'async
+                             (ensure-list unit-or-units) runtime nil))
+
+;;;###autoload
+(defun systemctl-disable (unit-or-units &optional manager runtime)
+  "Disable UNIT-OR-UNITS on MANAGER (`user' or `system' (default)).
+With prefix-argument RUNTIME, enable only for this session."
+  (interactive (append
+                (apply #'systemctl-read-unit-file "Disable: " systemctl-unit-types)
+                (list current-prefix-arg)))
+  (systemctl--manage-systemd manager "DisableUnitFiles" 'async
+                             (ensure-list unit-or-units) runtime))
+
+;;;###autoload
+(defun systemctl-mask (unit-or-units &optional manager runtime)
+  "Mask UNIT-OR-UNITS on MANAGER (`user' or `system' (default)).
+With prefix-argument RUNTIME, enable only for this session."
+  (interactive (append
+                (apply #'systemctl-read-unit-file "Mask: " systemctl-unit-types)
+                (list current-prefix-arg)))
+  (systemctl--manage-systemd manager "MaskUnitFiles" 'async
+                             (ensure-list unit-or-units) runtime nil))
+
+;;;###autoload
+(defun systemctl-unmask (unit-or-units &optional manager runtime)
+  "Unmask UNIT-OR-UNITS on MANAGER (`user' or `system' (default)).
+With prefix-argument RUNTIME, enable only for this session."
+  (interactive (append
+                (apply #'systemctl-read-unit-file "Unmask: " systemctl-unit-types)
+                (list current-prefix-arg)))
+  (systemctl--manage-systemd manager "UnmaskUnitFiles" 'async
+                             (ensure-list unit-or-units) runtime))
+
 (defun systemctl--manage-logind (method async &rest args)
   "Invoke a management METHOD on logind with the specified ARGS.
 
