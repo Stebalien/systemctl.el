@@ -512,9 +512,7 @@ list of strings: (OPERATION FROM TO)."
 (defun systemctl--manage-logind (method async &rest args)
   "Invoke a management METHOD on logind with the specified ARGS.
 
-If ASYNC is non-nil, invoke asynchronously.
-
-\(fn METHOD &key ASYNC &rest ARGS)"
+If ASYNC is non-nil, invoke asynchronously."
   (when (and (not noninteractive) (version<= "31.0" emacs-version))
     (setq args (cons :authorizable (cons t args))))
   (when async
