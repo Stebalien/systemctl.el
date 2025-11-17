@@ -38,7 +38,6 @@
 
 (defgroup systemctl nil
   "Systemd control utilities."
-  :version "0.0.1"
   :prefix "systemctl-"
   :group 'tools)
 
@@ -49,7 +48,7 @@
 
 (defcustom systemctl-unit-types '(service timer)
   "Systemd unit types to display in completion."
-  :version "0.0.1"
+  :package-version '(systemctl . "0.0.1")
   :type
   `(choice
     (const :tag "All" t)
@@ -61,7 +60,7 @@
 
 (defcustom systemctl-manager nil
   "Systemd units to manage: `system', `user', or nil for both."
-  :version "0.0.1"
+  :package-version '(systemctl . "0.0.1")
   :type
   '(radio
     :tag "Manage"
