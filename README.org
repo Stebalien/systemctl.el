@@ -38,7 +38,7 @@ They correspond to the same commands as defined on the [[man:systemctl(1)][syste
 :ID:       0cf357d6-9af2-47ba-bf17-628a7abb5fe2
 :END:
 
-This package implements two commands from the =loginctl(1)= shell command for locking/unlocking sessions. They don't precisely belong in a ~systemctl~ package but they're useful enough to include.
+This package implements two commands from the [[man:loginctl(1)][loginctl(1)]] shell command for locking/unlocking sessions. They don't precisely belong in a ~systemctl~ package but they're useful enough to include.
 
 - ~systemd-lock~ locks the current session, the target session when called with a session ID (may require polkit authentication), or all sessions when called with the symbol ~t~ (requires polkit authentication).
 - ~systemctl-unlock~ is the inverse of ~systemctl-lock~.
