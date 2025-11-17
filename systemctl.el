@@ -243,7 +243,7 @@ FILTER limits the units to prompt for. It can contain:
 - Any number of symbols/strings limiting the shown unit types (service,
   timer, etc.).
 - The symbols `user' and/or `system'. If only one of these is specified,
-  only the specifie units (user or system) will be shown. By default,all
+  only the specified units (user or system) will be shown. By default, all
   units (both user and system) are shown."
   (let-alist (systemctl--parse-filter filter)
     (let* ((units
@@ -264,7 +264,7 @@ FILTER limits the units to prompt for. It can contain:
   "Start a UNIT on MANAGER (`user' or `system' (default)).
 
 If ASYNC is non-nil, return immediately.
-If ASYNC is a function, it will ll be called when the method completes.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
@@ -281,7 +281,7 @@ On success, return (or pass to the ASYNC callback) the start job for the unit."
   "Stop a UNIT on MANAGER (`user' or `system' (default)).
 
 If ASYNC is non-nil, return immediately.
-If ASYNC is a function, it will ll be called when the method completes.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
@@ -298,7 +298,7 @@ On success, return (or pass to the ASYNC callback) the stop job for the unit."
   "Reload a UNIT on MANAGER (`user' or `system' (default)).
 
 If ASYNC is non-nil, return immediately.
-If ASYNC is a function, it will ll be called when the method completes.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
@@ -316,7 +316,7 @@ On success, return (or pass to the ASYNC callback) the reload job for the unit."
 Unless IF-RUNNING is non-nil, the unit will be started if not running.
 
 If ASYNC is non-nil, return immediately.
-If ASYNC is a function, it will ll be called when the method completes.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
@@ -340,7 +340,7 @@ On success, return (or pass to the ASYNC callback) the restart job for the unit.
 Unless IF-RUNNING is non-nil, the unit will be started if not running.
 
 If ASYNC is non-nil, return immediately.
-If ASYNC is a function, it will ll be called when the method completes.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
@@ -418,11 +418,9 @@ COMMAND is the name of the command (a string)."
 (defun systemctl-enable (unit &optional manager runtime async)
   "Enable a UNIT on MANAGER (`user' or `system' (default)).
 With prefix-argument RUNTIME, enable only for this session.
-If ASYNC is non-nil, Emacs won't wait for a response and will return
-immediately.
 
 If ASYNC is non-nil, return immediately.
-If ASYNC is a function, it will ll be called when the method completes.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
@@ -441,13 +439,10 @@ of strings: (OPERATION FROM TO)."
 ;;;###autoload
 (defun systemctl-disable (unit &optional manager runtime async)
   "Disable a UNIT on MANAGER (`user' or `system' (default)).
-With prefix-argument RUNTIME, enable only for this session.
-If ASYNC is non-nil, Emacs won't wait for a response and will return
-immediately.
-If ASYNC is a function, it'll be called when the method completes.
+With prefix-argument RUNTIME, disable only for this session.
 
 If ASYNC is non-nil, return immediately.
-If ASYNC is a function, it will ll be called when the method completes.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
@@ -463,12 +458,10 @@ list of strings: (OPERATION FROM TO)."
 ;;;###autoload
 (defun systemctl-mask (unit &optional manager runtime async)
   "Mask a UNIT on MANAGER (`user' or `system' (default)).
-With prefix-argument RUNTIME, enable only for this session.
-If ASYNC is non-nil, Emacs won't wait for a response and will return
-immediately.
+With prefix-argument RUNTIME, mask only for this session.
 
 If ASYNC is non-nil, return immediately.
-If ASYNC is a function, it will ll be called when the method completes.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
@@ -484,12 +477,10 @@ list of strings: (OPERATION FROM TO)."
 ;;;###autoload
 (defun systemctl-unmask (unit &optional manager runtime async)
   "Unmask UNIT on MANAGER (`user' or `system' (default)).
-With prefix-argument RUNTIME, enable only for this session.
-If ASYNC is non-nil, Emacs won't wait for a response and will return
-immediately.
+With prefix-argument RUNTIME, unmask only for this session.
 
 If ASYNC is non-nil, return immediately.
-If ASYNC is a function, it will ll be called when the method completes.
+If ASYNC is a function, it will be called when the method completes.
 The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the return value or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
@@ -668,10 +659,10 @@ If SESSION is t, unlock all sessions (requires authentication)."
 ;;; Halt
 
 (defun systemctl--can-halt-p ()
-  "Check if system can poweroff."
+  "Check if system can halt."
   (string= "yes" (systemctl--manage-logind "CanHalt" nil)))
 
-;;;###autoload(autoload 'systemctl-poweroff "systemctl" nil t)
+;;;###autoload(autoload 'systemctl-halt "systemctl" nil t)
 (transient-define-suffix systemctl-halt ()
   "Shut down but don't power off the system."
   :description "Halt"
