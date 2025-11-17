@@ -225,42 +225,79 @@ FILTER limits the units to prompt for. It can contain:
     unit)))
 
 ;;;###autoload
-(defun systemctl-start (unit &optional manager)
-  "Start a UNIT on MANAGER (`user' or `system' (default))."
-  (interactive (apply #'systemctl-read-unit-file "Start: " systemctl-unit-types))
-  (systemctl--manage-systemd manager "StartUnit" 'async unit "replace"))
+(defun systemctl-start (unit &optional manager async)
+  "Start a UNIT on MANAGER (`user' or `system' (default)).
+
+If ASYNC is non-nil, return immediately (with no value) and perform the
+operation asynchronously. If ASYNC is a function, call it when the operation
+is complete.
+
+On success, return (or pass to the ASYNC callback) the start job for the unit."
+  (interactive (append (apply #'systemctl-read-unit-file "Start: "
+                              systemctl-unit-types)
+                       (list 'async)))
+  (systemctl--manage-systemd manager "StartUnit" async unit "replace"))
 
 ;;;###autoload
-(defun systemctl-stop (unit &optional manager)
-  "Stop a UNIT on MANAGER (`user' or `system' (default))."
-  (interactive (apply #'systemctl-read-unit "Stop: " systemctl-unit-types))
-  (systemctl--manage-systemd manager "StopUnit" 'async unit "replace"))
+(defun systemctl-stop (unit &optional manager async)
+  "Stop a UNIT on MANAGER (`user' or `system' (default)).
+
+If ASYNC is non-nil, return immediately (with no value) and perform the
+operation asynchronously. If ASYNC is a function, call it when the operation
+is complete.
+
+On success, return (or pass to the ASYNC callback) the stop job for the unit."
+  (interactive (append (apply #'systemctl-read-unit "Stop: "
+                              systemctl-unit-types)
+                       (list 'async)))
+  (systemctl--manage-systemd manager "StopUnit" async unit "replace"))
 
 ;;;###autoload
-(defun systemctl-reload (unit &optional manager)
-  "Reload a UNIT on MANAGER (`user' or `system' (default))."
-  (interactive (apply #'systemctl-read-unit "Reload: " systemctl-unit-types))
-  (systemctl--manage-systemd manager "ReloadUnit" 'async unit "replace"))
+(defun systemctl-reload (unit &optional manager async)
+  "Reload a UNIT on MANAGER (`user' or `system' (default)).
+
+If ASYNC is non-nil, return immediately (with no value) and perform the
+operation asynchronously. If ASYNC is a function, call it when the operation
+is complete.
+
+On success, return (or pass to the ASYNC callback) the reload job for the unit."
+  (interactive (append (apply #'systemctl-read-unit "Reload: "
+                              systemctl-unit-types)
+                       (list 'async)))
+  (systemctl--manage-systemd manager "ReloadUnit" async unit "replace"))
 
 ;;;###autoload
-(defun systemctl-restart (unit &optional manager if-running)
+(defun systemctl-restart (unit &optional manager if-running async)
   "Restart a UNIT on MANAGER (`user' or `system' (default)).
-Unless IF-RUNNING is non-nil, the unit will be started if not running."
+Unless IF-RUNNING is non-nil, the unit will be started if not running.
+
+If ASYNC is non-nil, return immediately (with no value) and perform the
+operation asynchronously. If ASYNC is a function, call it when the operation
+is complete.
+
+On success, return (or pass to the ASYNC callback) the restart job for the unit."
   (interactive (append
                 (apply #'systemctl-read-unit
                        (concat "Restart"
                                (when current-prefix-arg " (if running)")
                                ": ")
                        systemctl-unit-types)
-                (list current-prefix-arg)))
+                (list current-prefix-arg 'async)))
   (systemctl--manage-systemd
    manager (if if-running "TryRestartUnit" "RestartUnit")
-   'async unit "replace"))
+   async unit "replace"))
 
 ;;;###autoload
-(defun systemctl-reload-or-restart (unit &optional manager if-running)
+(defun systemctl-reload-or-restart (unit &optional manager if-running async)
   "Reload or restart a UNIT on MANAGER (`user' or `system' (default)).
-Unless IF-RUNNING is non-nil, the unit will be started if not running."
+Unless IF-RUNNING is non-nil, the unit will be started if not running.
+
+If ASYNC is non-nil, return immediately (with no value) and perform the
+operation asynchronously. If ASYNC is a function, call it when the operation
+is complete.
+
+On success, return (or pass to the ASYNC callback) the reload/restart
+job for the unit."
   (interactive (append
                 (apply #'systemctl-read-unit
                        (concat "Reload or restart"
@@ -271,7 +308,7 @@ Unless IF-RUNNING is non-nil, the unit will be started if not running."
   (systemctl--manage-systemd
    manager
    (if if-running "ReloadOrTryRestartUnit" "ReloadOrRestartUnit")
-   'async unit "replace"))
+   async unit "replace"))
 
 ;;;###autoload
 (defun systemctl-daemon-reload (&optional manager)
