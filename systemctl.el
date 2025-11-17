@@ -286,45 +286,88 @@ Unless IF-RUNNING is non-nil, the unit will be started if not running."
                        (_ (keyboard-quit)))))
   (systemctl--manage-systemd manager "Reload" 'async))
 
-;;;###autoload
-(defun systemctl-enable (unit-or-units &optional manager runtime)
-  "Enable UNIT-OR-UNITS on MANAGER (`user' or `system' (default)).
-With prefix-argument RUNTIME, enable only for this session."
-  (interactive (append
-                (apply #'systemctl-read-unit-file "Enable: " systemctl-unit-types)
-                (list current-prefix-arg)))
-  (systemctl--manage-systemd manager "EnableUnitFiles" 'async
-                             (ensure-list unit-or-units) runtime nil))
+
+(defun systemctl--format-link-ops (ops)
+  "Format link OPS where each op is a list of (OP FROM TO)."
+  (string-join
+   (mapcar (pcase-lambda (`(,action ,from ,to))
+             (if (string-empty-p to)
+                 (format "%s %s" action (abbreviate-file-name from))
+               (format "%s %s -> %s" action
+                       (abbreviate-file-name from)
+                       (abbreviate-file-name to))))
+           ops)
+   "; "))
+
+(defun systemctl--interactive-link-args (command)
+  "Query the user for arguments to one of the systemctl \"link\" commands.
+Returns a list of:
+
+- The selected unit.
+- The systemd manager on which to operate.
+- A boolean indicating whether to perform the link operation for the
+  current session only.
+- A callback to report the command's outcome to the user.
+
+COMMAND is the name of the command (a string)."
+  (pcase-let ((`(,unit ,manager)
+               (apply #'systemctl-read-unit-file
+                      (concat (capitalize command) ": ")
+                      systemctl-unit-types)))
+    (list unit manager current-prefix-arg
+          (lambda (&rest args)
+            (when (length= args 1) (push t args))
+            (pcase args
+              (`(nil ,_)
+               (message "%s %s: unit has no install section" command unit))
+              (`(t nil) (message "%s %s: nothing to do" command unit))
+              (`(t ,ops)
+               (message "%s %s: %s" command unit
+                        (systemctl--format-link-ops ops))))))))
 
 ;;;###autoload
-(defun systemctl-disable (unit-or-units &optional manager runtime)
-  "Disable UNIT-OR-UNITS on MANAGER (`user' or `system' (default)).
-With prefix-argument RUNTIME, enable only for this session."
-  (interactive (append
-                (apply #'systemctl-read-unit-file "Disable: " systemctl-unit-types)
-                (list current-prefix-arg)))
-  (systemctl--manage-systemd manager "DisableUnitFiles" 'async
-                             (ensure-list unit-or-units) runtime))
+(defun systemctl-enable (unit &optional manager runtime async)
+  "Enable a UNIT on MANAGER (`user' or `system' (default)).
+With prefix-argument RUNTIME, enable only for this session.
+If ASYNC is non-nil, Emacs won't wait for a response and will return
+immediately.
+If ASYNC is a function, it'll be called when the method completes."
+  (interactive (systemctl--interactive-link-args "enable"))
+  (systemctl--manage-systemd manager "EnableUnitFiles"
+                             async (list unit) runtime nil))
 
 ;;;###autoload
-(defun systemctl-mask (unit-or-units &optional manager runtime)
-  "Mask UNIT-OR-UNITS on MANAGER (`user' or `system' (default)).
-With prefix-argument RUNTIME, enable only for this session."
-  (interactive (append
-                (apply #'systemctl-read-unit-file "Mask: " systemctl-unit-types)
-                (list current-prefix-arg)))
-  (systemctl--manage-systemd manager "MaskUnitFiles" 'async
-                             (ensure-list unit-or-units) runtime nil))
+(defun systemctl-disable (unit &optional manager runtime async)
+  "Disable a UNIT on MANAGER (`user' or `system' (default)).
+With prefix-argument RUNTIME, enable only for this session.
+If ASYNC is non-nil, Emacs won't wait for a response and will return
+immediately.
+If ASYNC is a function, it'll be called when the method completes."
+  (interactive (systemctl--interactive-link-args "disable"))
+  (systemctl--manage-systemd manager "DisableUnitFiles"
+                             async (list unit) runtime))
 
 ;;;###autoload
-(defun systemctl-unmask (unit-or-units &optional manager runtime)
-  "Unmask UNIT-OR-UNITS on MANAGER (`user' or `system' (default)).
-With prefix-argument RUNTIME, enable only for this session."
-  (interactive (append
-                (apply #'systemctl-read-unit-file "Unmask: " systemctl-unit-types)
-                (list current-prefix-arg)))
-  (systemctl--manage-systemd manager "UnmaskUnitFiles" 'async
-                             (ensure-list unit-or-units) runtime))
+(defun systemctl-mask (unit &optional manager runtime async)
+  "Mask a UNIT on MANAGER (`user' or `system' (default)).
+With prefix-argument RUNTIME, enable only for this session.
+If ASYNC is non-nil, Emacs won't wait for a response and will return
+immediately.
+If ASYNC is a function, it'll be called when the method completes."
+  (interactive (systemctl--interactive-link-args "mask"))
+  (systemctl--manage-systemd manager "MaskUnitFiles"
+                             async (list unit) runtime nil))
+
+;;;###autoload
+(defun systemctl-unmask (unit &optional manager runtime async)
+  "Unmask UNIT on MANAGER (`user' or `system' (default)).
+With prefix-argument RUNTIME, enable only for this session.
+If ASYNC is non-nil, Emacs won't wait for a response and will return
+immediately.
+If ASYNC is a function, it'll be called when the method completes."
+  (interactive (systemctl--interactive-link-args "unmask"))
+  (systemctl--manage-systemd manager "UnmaskUnitFiles"
+                             async (list unit) runtime))
 
 (defun systemctl--manage-logind (method async &rest args)
   "Invoke a management METHOD on logind with the specified ARGS.
