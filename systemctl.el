@@ -59,6 +59,36 @@
               `(const :tag ,(capitalize (symbol-name type)) ,type))
             systemctl--unit-types))))
 
+
+;;; Setup D-Bus error handling.
+
+;; Unfortunately, Emacs swallows errors from asynchronous D-Bus calls
+;; by default.
+
+(defun systemctl--dbus-error-handler (ev err)
+  "Handle a D-Bus error from a `systemctl' call.
+EV is the event that triggered the error, ERR is the error itself.
+
+This handler detects if the error came from this library and, when that
+happens, it invokes the error handler with the error."
+  (when-let* ((handler (dbus-event-handler ev))
+              (_(symbolp handler))
+              (real-handler (get handler 'systemctl-dbus-handler)))
+    (with-demoted-errors "Error in systemctl D-Bus handler: %S"
+      (funcall real-handler (car err) (cdr err)))))
+(add-hook 'dbus-event-error-functions #'systemctl--dbus-error-handler)
+
+(defun systemctl--make-dbus-callback (cb)
+  "Transform a callback into one that can be passed to `dbus'.
+CB must be a function that takes an error symbol as the first argument
+and a return-value as the second argument.  If the error symbol is
+non-nil, the second argument is the error value.  Otherwise, the
+second argument is the return-value."
+  (let ((sym (gensym "systemctl--callback")))
+    (fset sym (lambda (&rest ret) (funcall cb nil ret)))
+    (put sym 'systemctl-dbus-handler cb)
+    sym))
+
 (defun systemctl--remove-keyword-params (seq)
   "Remove all keyword/value pairs from SEQ."
   (if (null seq) nil
@@ -67,17 +97,22 @@
       (if (keywordp head) (systemctl--remove-keyword-params (cdr tail))
         (cons head (systemctl--remove-keyword-params tail))))))
 
+;;; Systemctl
+
 (defun systemctl--manage-systemd (manager method async &rest args)
   "Invoke a management METHOD on systemd with the specified ARGS.
 
 MANAGER specifies the manager to operate on.
 If ASYNC is non-nil, Emacs won't wait for a response and will return
 immediately.
-If ASYNC is a function, it'll be called when the method completes."
+If ASYNC is a function, it'll be called when the method completes.
+The first argument will be nil on success or, an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE)."
   (when (and (not noninteractive) (version<= "31.0" emacs-version))
     (setq args (cons :authorizable (cons t args))))
   (when async
-    (push (and (functionp async) async) args))
+    (push (and (functionp async) (systemctl--make-dbus-callback async)) args))
   (apply (if async #'dbus-call-method-asynchronously #'dbus-call-method)
          (pcase manager
            ((or 'system 'nil) :system)
@@ -228,9 +263,12 @@ FILTER limits the units to prompt for. It can contain:
 (defun systemctl-start (unit &optional manager async)
   "Start a UNIT on MANAGER (`user' or `system' (default)).
 
-If ASYNC is non-nil, return immediately (with no value) and perform the
-operation asynchronously. If ASYNC is a function, call it when the operation
-is complete.
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will ll be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the start job for the unit."
   (interactive (append (apply #'systemctl-read-unit-file "Start: "
@@ -242,9 +280,12 @@ On success, return (or pass to the ASYNC callback) the start job for the unit."
 (defun systemctl-stop (unit &optional manager async)
   "Stop a UNIT on MANAGER (`user' or `system' (default)).
 
-If ASYNC is non-nil, return immediately (with no value) and perform the
-operation asynchronously. If ASYNC is a function, call it when the operation
-is complete.
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will ll be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the stop job for the unit."
   (interactive (append (apply #'systemctl-read-unit "Stop: "
@@ -256,9 +297,12 @@ On success, return (or pass to the ASYNC callback) the stop job for the unit."
 (defun systemctl-reload (unit &optional manager async)
   "Reload a UNIT on MANAGER (`user' or `system' (default)).
 
-If ASYNC is non-nil, return immediately (with no value) and perform the
-operation asynchronously. If ASYNC is a function, call it when the operation
-is complete.
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will ll be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the reload job for the unit."
   (interactive (append (apply #'systemctl-read-unit "Reload: "
@@ -271,9 +315,12 @@ On success, return (or pass to the ASYNC callback) the reload job for the unit."
   "Restart a UNIT on MANAGER (`user' or `system' (default)).
 Unless IF-RUNNING is non-nil, the unit will be started if not running.
 
-If ASYNC is non-nil, return immediately (with no value) and perform the
-operation asynchronously. If ASYNC is a function, call it when the operation
-is complete.
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will ll be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the restart job for the unit."
   (interactive (append
@@ -292,9 +339,12 @@ On success, return (or pass to the ASYNC callback) the restart job for the unit.
   "Reload or restart a UNIT on MANAGER (`user' or `system' (default)).
 Unless IF-RUNNING is non-nil, the unit will be started if not running.
 
-If ASYNC is non-nil, return immediately (with no value) and perform the
-operation asynchronously. If ASYNC is a function, call it when the operation
-is complete.
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will ll be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the reload/restart
 job for the unit."
@@ -352,15 +402,17 @@ COMMAND is the name of the command (a string)."
                       (concat (capitalize command) ": ")
                       systemctl-unit-types)))
     (list unit manager current-prefix-arg
-          (lambda (&rest args)
-            (when (length= args 1) (push t args))
-            (pcase args
-              (`(nil ,_)
-               (message "%s %s: unit has no install section" command unit))
-              (`(t nil) (message "%s %s: nothing to do" command unit))
-              (`(t ,ops)
-               (message "%s %s: %s" command unit
-                        (systemctl--format-link-ops ops))))))))
+          (lambda (err res)
+            (if err
+                (message "%s %s failed: %s" command unit (nth 1 res))
+              (when (length= res 1) (push t res))
+              (pcase res
+                (`(nil ,_)
+                 (message "%s %s: unit has no install section" command unit))
+                (`(t nil) (message "%s %s: nothing to do" command unit))
+                (`(t ,ops)
+                 (message "%s %s: %s" command unit
+                          (systemctl--format-link-ops ops)))))))))
 
 ;;;###autoload
 (defun systemctl-enable (unit &optional manager runtime async)
@@ -368,7 +420,20 @@ COMMAND is the name of the command (a string)."
 With prefix-argument RUNTIME, enable only for this session.
 If ASYNC is non-nil, Emacs won't wait for a response and will return
 immediately.
-If ASYNC is a function, it'll be called when the method completes."
+
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will ll be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings.
+
+On success, return (or pass to the ASYNC callback) a list of:
+
+1. A boolean indicating whether or not the target unit even has an
+Install section.
+2. A list of (un)link operations performed where each element is a list
+of strings: (OPERATION FROM TO)."
   (interactive (systemctl--interactive-link-args "enable"))
   (systemctl--manage-systemd manager "EnableUnitFiles"
                              async (list unit) runtime nil))
@@ -379,7 +444,18 @@ If ASYNC is a function, it'll be called when the method completes."
 With prefix-argument RUNTIME, enable only for this session.
 If ASYNC is non-nil, Emacs won't wait for a response and will return
 immediately.
-If ASYNC is a function, it'll be called when the method completes."
+If ASYNC is a function, it'll be called when the method completes.
+
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will ll be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings.
+
+On success, return (or pass to the ASYNC callback as a list of length
+one) a list of (un)link operations performed where each element is a
+list of strings: (OPERATION FROM TO)."
   (interactive (systemctl--interactive-link-args "disable"))
   (systemctl--manage-systemd manager "DisableUnitFiles"
                              async (list unit) runtime))
@@ -390,7 +466,17 @@ If ASYNC is a function, it'll be called when the method completes."
 With prefix-argument RUNTIME, enable only for this session.
 If ASYNC is non-nil, Emacs won't wait for a response and will return
 immediately.
-If ASYNC is a function, it'll be called when the method completes."
+
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will ll be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings.
+
+On success, return (or pass to the ASYNC callback as a list of length
+one) a list of (un)link operations performed where each element is a
+list of strings: (OPERATION FROM TO)."
   (interactive (systemctl--interactive-link-args "mask"))
   (systemctl--manage-systemd manager "MaskUnitFiles"
                              async (list unit) runtime nil))
@@ -401,10 +487,22 @@ If ASYNC is a function, it'll be called when the method completes."
 With prefix-argument RUNTIME, enable only for this session.
 If ASYNC is non-nil, Emacs won't wait for a response and will return
 immediately.
-If ASYNC is a function, it'll be called when the method completes."
+
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will ll be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the return value or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings.
+
+On success, return (or pass to the ASYNC callback as a list of length
+one) a list of (un)link operations performed where each element is a
+list of strings: (OPERATION FROM TO)."
   (interactive (systemctl--interactive-link-args "unmask"))
   (systemctl--manage-systemd manager "UnmaskUnitFiles"
                              async (list unit) runtime))
+
+;;; Loginctl
 
 (defun systemctl--manage-logind (method async &rest args)
   "Invoke a management METHOD on logind with the specified ARGS.
