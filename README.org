@@ -2,6 +2,23 @@
 
 An Emacs package for controlling [[https://systemd.io/][systemd]] over [[https://www.freedesktop.org/wiki/Software/dbus/][D-Bus]].
 
+* Customization Options
+:PROPERTIES:
+:ID:       7bef501e-f8c4-47e1-82e8-9594629cbb08
+:END:
+
+*systemctl-manager*: By default, interactive commands that operate on services prompt for BOTH user and system services. If you only wish to operate on one of these, customize the ~systemctl-manager~ option. For example, if you don't use systemd's user manager, you'll likely want to add the following to your =init.el=:
+
+#+begin_src elisp
+(setopt systemctl-manager 'system)
+#+end_src
+
+*systemctl-unit-types*: By default, interactive commands only operate on =service= and =timer= units. To include other unit types, customize ~systemctl-unit-types~. For example, if you want to start/stop targets, you may want to add the following to your =init.el=:
+
+#+begin_src elisp
+(add-to-list 'systemctl-unit-types 'target)
+#+end_src
+
 * Power Menu
 :PROPERTIES:
 :ID:       b48585ab-aac7-4b69-9a44-e61f41d07267
