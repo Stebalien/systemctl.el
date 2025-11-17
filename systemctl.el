@@ -59,6 +59,15 @@
               `(const :tag ,(capitalize (symbol-name type)) ,type))
             systemctl--unit-types))))
 
+(defcustom systemctl-manager nil
+  "Systemd units to manage: `system', `user', or nil for both."
+  :version "0.0.1"
+  :type
+  '(radio
+    :tag "Manage"
+    (const :tag "All Services" nil)
+    (const :tag "User Services ONLY" user)
+    (const :tag "System Services ONLY" system)))
 
 ;;; Setup D-Bus error handling.
 
@@ -259,6 +268,12 @@ FILTER limits the units to prompt for. It can contain:
         (setcar unit (string-trim (buffer-string)))))
     unit)))
 
+(defun systemctl--interactive-filters ()
+  "Return the unit filters to be used by-default for completion."
+  (if systemctl-manager
+      (cons systemctl-manager systemctl-unit-types)
+    systemctl-unit-types))
+
 ;;;###autoload
 (defun systemctl-start (unit &optional manager async)
   "Start a UNIT on MANAGER (`user' or `system' (default)).
@@ -272,7 +287,7 @@ ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the start job for the unit."
   (interactive (append (apply #'systemctl-read-unit-file "Start: "
-                              systemctl-unit-types)
+                              (systemctl--interactive-filters))
                        (list 'async)))
   (systemctl--manage-systemd manager "StartUnit" async unit "replace"))
 
@@ -289,7 +304,7 @@ ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the stop job for the unit."
   (interactive (append (apply #'systemctl-read-unit "Stop: "
-                              systemctl-unit-types)
+                              (systemctl--interactive-filters))
                        (list 'async)))
   (systemctl--manage-systemd manager "StopUnit" async unit "replace"))
 
@@ -306,7 +321,7 @@ ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the reload job for the unit."
   (interactive (append (apply #'systemctl-read-unit "Reload: "
-                              systemctl-unit-types)
+                              (systemctl--interactive-filters))
                        (list 'async)))
   (systemctl--manage-systemd manager "ReloadUnit" async unit "replace"))
 
@@ -328,7 +343,7 @@ On success, return (or pass to the ASYNC callback) the restart job for the unit.
                        (concat "Restart"
                                (when current-prefix-arg " (if running)")
                                ": ")
-                       systemctl-unit-types)
+                       (systemctl--interactive-filters))
                 (list current-prefix-arg 'async)))
   (systemctl--manage-systemd
    manager (if if-running "TryRestartUnit" "RestartUnit")
@@ -353,7 +368,7 @@ job for the unit."
                        (concat "Reload or restart"
                                (when current-prefix-arg " (if running)")
                                ": ")
-                       systemctl-unit-types)
+                       (systemctl--interactive-filters))
                 (list current-prefix-arg)))
   (systemctl--manage-systemd
    manager
@@ -400,7 +415,7 @@ COMMAND is the name of the command (a string)."
   (pcase-let ((`(,unit ,manager)
                (apply #'systemctl-read-unit-file
                       (concat (capitalize command) ": ")
-                      systemctl-unit-types)))
+                      (systemctl--interactive-filters))))
     (list unit manager current-prefix-arg
           (lambda (err res)
             (if err
@@ -692,7 +707,7 @@ When called interactively, entry into the firmware setup is toggled."
                              (propertize "on" 'face 'transient-value)
                            (propertize "off" 'face 'transient-inactive-value))))
   (interactive (list (not (systemctl--get-reboot-firmware))))
-  (systemctl--manage-logind "SetRebootToFirmwareSetup" 'async enable))
+  (systemctl--manage-logind "SetRebootToFirmwareSetup" nil enable))
 
 ;;; Reboot to bootloader
 
@@ -718,7 +733,7 @@ When called interactively, entry into the firmware setup is toggled."
                            (propertize "off" 'face 'transient-inactive-value))))
   (interactive (list (xor (systemctl--get-reboot-bootloader)
                           (read-string "Timeout (seconds) [5]: " nil nil 5))))
-  (systemctl--manage-logind "RebootToBootLoaderMenu" 'async timeout))
+  (systemctl--manage-logind "RebootToBootLoaderMenu" nil timeout))
 
 ;;; Set next boot
 
@@ -745,7 +760,7 @@ When called interactively, entry into the firmware setup is toggled."
   (interactive (list (completing-read "Boot Next: "
                                       (systemctl--logind-property "BootLoaderEntries")
                                       nil t)))
-  (systemctl--manage-logind "SetRebootToBootLoaderEntry" 'async entry))
+  (systemctl--manage-logind "SetRebootToBootLoaderEntry" nil entry))
 
 ;;; Power Menu
 
