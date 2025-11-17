@@ -1,5 +1,4 @@
 #+TITLE: systemctl.el
-#+LINK: man https://man.he.net/?topic=%s&section=all
 
 An Emacs package for controlling [[https://systemd.io/][systemd]] over [[https://www.freedesktop.org/wiki/Software/dbus/][D-Bus]].
 
