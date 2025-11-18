@@ -363,7 +363,7 @@ failure.  The second argument will be the return value or a list of
 ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the restart job for the unit."
-  (interactive (systemctl--interactive-control-args "Reload" nil " (if running)"))
+  (interactive (systemctl--interactive-control-args "Restart" nil " (if running)"))
   (systemctl--manage-systemd
    manager (if if-running "TryRestartUnit" "RestartUnit")
    async unit "replace"))
@@ -382,7 +382,7 @@ ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the reload/restart
 job for the unit."
-  (interactive (systemctl--interactive-control-args "Reload" nil " (if running)"))
+  (interactive (systemctl--interactive-control-args "Reload or restart" nil " (if running)"))
   (systemctl--manage-systemd
    manager
    (if if-running "ReloadOrTryRestartUnit" "ReloadOrRestartUnit")
