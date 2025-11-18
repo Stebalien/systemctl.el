@@ -153,7 +153,11 @@ failure.  The second argument will be the return value or a list of
   "Completion annotation function used when prompting for a systemd UNIT."
   (concat
    (propertize " " 'display '(space :align-to center))
-   (get-text-property 0 'systemctl--unit-description unit)))
+   (propertize
+    (or
+     (get-text-property 0 'systemctl--unit-description unit)
+     "[not loaded]")
+    'face 'completions-annotations)))
 
 (defun systemctl--completion-group (unit transform)
   "Completion group function used when prompting for a systemd UNIT.
@@ -234,7 +238,7 @@ MANAGER is one of `system' or `user'."
     (seq-map 'file-name-nondirectory)
     (seq-sort 'string-lessp)
     (delete-consecutive-dups)
-    (seq-map (lambda (unit) (list unit manager "[unloaded]")))))
+    (seq-map (lambda (unit) (list unit manager)))))
 
 (defun systemctl--list-all-units (manager patterns)
   "List all units belonging to MANAGER, filtering by PATTERNS if non-empty.
