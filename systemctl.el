@@ -85,7 +85,8 @@
             systemctl--unit-types))))
 
 (defcustom systemctl-manager nil
-  "Systemd units to manage: `system', `user', or nil for both."
+  "Systemd manager to operate on in interactive commands.
+`system', `user', or nil for both."
   :package-version '(systemctl . "0.0.1")
   :type
   '(radio
