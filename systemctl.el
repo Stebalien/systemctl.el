@@ -240,15 +240,15 @@ MANAGER is one of `system' or `user'."
   "List all units belonging to MANAGER, filtering by PATTERNS if non-empty.
 MANAGER is one of `system' or `user'."
   (thread-last
-   (append
-    (systemctl--list-units manager patterns)
-    (systemctl--list-unit-files manager patterns))
-   (seq-sort (lambda (a b) (string-lessp (car a) (car b))))
-   (seq-remove
-    (let (prev)
-      (lambda (item)
-        (prog1 (string= (car prev) (car item))
-          (setq prev item)))))))
+    (append
+     (systemctl--list-units manager patterns)
+     (systemctl--list-unit-files manager patterns))
+    (seq-sort (lambda (a b) (string-lessp (car a) (car b))))
+    (seq-remove
+     (let (prev)
+       (lambda (item)
+         (prog1 (string= (car prev) (car item))
+           (setq prev item)))))))
 
 (defun systemctl-read-unit (&optional prompt &rest filter)
   "Prompt for a unit (limited to loaded units).
@@ -282,14 +282,14 @@ FILTER limits the units to prompt for. It can contain:
             (append (when .user (systemctl--list-all-units 'user .patterns))
                     (when .system (systemctl--list-all-units 'system .patterns))))
            (unit (systemctl--choose-unit (or prompt "Unit file: ") units)))
-    (when (string-suffix-p "@" (file-name-base (car unit)))
-      (with-temp-buffer
-        (call-process "systemd-escape" nil t nil
-                      "--template"
-                      (car unit)
-                      (read-string "Instance: "))
-        (setcar unit (string-trim (buffer-string)))))
-    unit)))
+      (when (string-suffix-p "@" (file-name-base (car unit)))
+        (with-temp-buffer
+          (call-process "systemd-escape" nil t nil
+                        "--template"
+                        (car unit)
+                        (read-string "Instance: "))
+          (setcar unit (string-trim (buffer-string)))))
+      unit)))
 
 (defun systemctl--interactive-filters ()
   "Return the unit filters to be used by-default for completion."
