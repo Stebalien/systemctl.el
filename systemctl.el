@@ -452,7 +452,7 @@ Returns a list of:
 COMMAND is the name of the command (a string)."
   (pcase-let ((`(,unit ,manager)
                (apply #'systemctl-read-unit-file
-                      (concat (capitalize command) ": ")
+                      (concat command ": ")
                       (systemctl--interactive-filters))))
     (list unit manager current-prefix-arg
           (lambda (err res)
@@ -485,7 +485,7 @@ On success, return (or pass to the ASYNC callback) a list of:
 Install section.
 2. A list of (un)link operations performed where each element is a list
 of strings: (OPERATION FROM TO)."
-  (interactive (systemctl--interactive-link-args "enable"))
+  (interactive (systemctl--interactive-link-args "Enable"))
   (systemctl--manage-systemd manager "EnableUnitFiles"
                              async (list unit) runtime nil))
 
@@ -504,7 +504,7 @@ ERROR-MESSAGE are strings.
 On success, return (or pass to the ASYNC callback as a list of length
 one) a list of (un)link operations performed where each element is a
 list of strings: (OPERATION FROM TO)."
-  (interactive (systemctl--interactive-link-args "disable"))
+  (interactive (systemctl--interactive-link-args "Disable"))
   (systemctl--manage-systemd manager "DisableUnitFiles"
                              async (list unit) runtime))
 
@@ -523,7 +523,7 @@ ERROR-MESSAGE are strings.
 On success, return (or pass to the ASYNC callback as a list of length
 one) a list of (un)link operations performed where each element is a
 list of strings: (OPERATION FROM TO)."
-  (interactive (systemctl--interactive-link-args "mask"))
+  (interactive (systemctl--interactive-link-args "Mask"))
   (systemctl--manage-systemd manager "MaskUnitFiles"
                              async (list unit) runtime nil))
 
@@ -542,7 +542,7 @@ ERROR-MESSAGE are strings.
 On success, return (or pass to the ASYNC callback as a list of length
 one) a list of (un)link operations performed where each element is a
 list of strings: (OPERATION FROM TO)."
-  (interactive (systemctl--interactive-link-args "unmask"))
+  (interactive (systemctl--interactive-link-args "Unmask"))
   (systemctl--manage-systemd manager "UnmaskUnitFiles"
                              async (list unit) runtime))
 
