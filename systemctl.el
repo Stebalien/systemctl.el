@@ -273,6 +273,37 @@ FILTER limits the units to prompt for. It can contain:
       (cons systemctl-manager systemctl-unit-types)
     systemctl-unit-types))
 
+(defun systemctl--interactive-control-args (operation include-files &optional prefix-arg)
+  "Query the user for arguments to one of systemctl's unit control operations.
+If INCLUDE-FILES is t, unloaded units are included.
+If PREFIX-ARG is non-nil, the command takes a prefix argument in the
+3rd position. The value of PREFIX-ARG is appended to the prompt.
+
+Return a list of:
+
+- The selected unit.
+- The systemd manager on which to operate.
+- If PREFIX-ARG is non-nil, the value of `current-prefix-arg'.
+- A callback to report the command's outcome to the user.
+
+OPERATION is the name of the operation (a string). It's used in the
+prompt and in error messages."
+  (pcase-let ((`(,unit ,manager)
+               (apply (if include-files
+                          #'systemctl-read-unit-file
+                        #'systemctl-read-unit)
+                      (concat operation
+                              (and current-prefix-arg prefix-arg)
+                              ": ")
+                      (systemctl--interactive-filters))))
+    `( ,unit
+       ,manager
+       ,@(when prefix-arg (list current-prefix-arg))
+       ,(lambda (err res)
+          (when err
+            (message "%s %s failed: %s" operation unit (nth 1 res)))))))
+
+
 ;;;###autoload
 (defun systemctl-start (unit &optional manager async)
   "Start a UNIT on MANAGER (`user' or `system' (default)).
@@ -285,9 +316,7 @@ failure.  The second argument will be the return value or a list of
 ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the start job for the unit."
-  (interactive (append (apply #'systemctl-read-unit-file "Start: "
-                              (systemctl--interactive-filters))
-                       (list 'async)))
+  (interactive (systemctl--interactive-control-args "Start" t))
   (systemctl--manage-systemd manager "StartUnit" async unit "replace"))
 
 ;;;###autoload
@@ -302,9 +331,7 @@ failure.  The second argument will be the return value or a list of
 ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the stop job for the unit."
-  (interactive (append (apply #'systemctl-read-unit "Stop: "
-                              (systemctl--interactive-filters))
-                       (list 'async)))
+  (interactive (systemctl--interactive-control-args "Stop" nil))
   (systemctl--manage-systemd manager "StopUnit" async unit "replace"))
 
 ;;;###autoload
@@ -319,9 +346,7 @@ failure.  The second argument will be the return value or a list of
 ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the reload job for the unit."
-  (interactive (append (apply #'systemctl-read-unit "Reload: "
-                              (systemctl--interactive-filters))
-                       (list 'async)))
+  (interactive (systemctl--interactive-control-args "Reload" nil))
   (systemctl--manage-systemd manager "ReloadUnit" async unit "replace"))
 
 ;;;###autoload
@@ -337,13 +362,7 @@ failure.  The second argument will be the return value or a list of
 ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the restart job for the unit."
-  (interactive (append
-                (apply #'systemctl-read-unit
-                       (concat "Restart"
-                               (when current-prefix-arg " (if running)")
-                               ": ")
-                       (systemctl--interactive-filters))
-                (list current-prefix-arg 'async)))
+  (interactive (systemctl--interactive-control-args "Reload" nil " (if running)"))
   (systemctl--manage-systemd
    manager (if if-running "TryRestartUnit" "RestartUnit")
    async unit "replace"))
@@ -362,13 +381,7 @@ ERROR-MESSAGE are strings.
 
 On success, return (or pass to the ASYNC callback) the reload/restart
 job for the unit."
-  (interactive (append
-                (apply #'systemctl-read-unit
-                       (concat "Reload or restart"
-                               (when current-prefix-arg " (if running)")
-                               ": ")
-                       (systemctl--interactive-filters))
-                (list current-prefix-arg)))
+  (interactive (systemctl--interactive-control-args "Reload" nil " (if running)"))
   (systemctl--manage-systemd
    manager
    (if if-running "ReloadOrTryRestartUnit" "ReloadOrRestartUnit")
