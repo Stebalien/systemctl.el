@@ -165,29 +165,33 @@ Otherwise, return a group name suitable for the unit."
             ":"
             (file-name-extension unit))))
 
+(defun systemctl--format-unit-display-name (name manager &optional desc)
+  "Format unit NAME from MANAGER with DESC for display."
+  (propertize (format "%s/%s" manager name)
+              'systemctl--unit-description desc))
+
 (defconst systemctl--completion-properties
   `((group-function . ,#'systemctl--completion-group)
     (annotation-function . ,#'systemctl--completion-annotation))
   "Completion properties for `systemctl-read-unit' prompts.")
 
+(defun systemctl--make-completion-table (units)
+  "Make a completion table from a list of UNITS."
+  (seq-map
+   (lambda (unit)
+     (cons (apply #'systemctl--format-unit-display-name unit)
+           unit))
+   units))
+
 (defun systemctl--choose-unit (prompt units)
   "PROMPT for a unit from the given list of UNITS."
-  (let ((candidates
-         (seq-map (lambda (unit)
-                    (let ((name (pop unit))
-                          (manager (pop unit))
-                          (desc (pop unit)))
-                      (cons (propertize
-                             (format "%s/%s" manager name)
-                             'systemctl--unit-description desc)
-                            (list name manager))))
-                  units)))
-    (alist-get (completing-read prompt (completion-table-with-metadata
-                                        candidates
-                                        systemctl--completion-properties)
-                                nil t)
-               candidates
-               nil nil #'string=)))
+  (let ((candidates (systemctl--make-completion-table units)))
+    (alist-get
+     (completing-read prompt
+                      (completion-table-with-metadata
+                       candidates systemctl--completion-properties)
+                      nil t)
+     candidates nil nil #'string=)))
 
 (defun systemctl--parse-filter (filter)
   "Parse FILTER into an alist with the keys `user' `system' and `patterns'."
