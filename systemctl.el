@@ -97,13 +97,6 @@ second argument is the return-value."
     (put sym 'systemctl-dbus-handler cb)
     sym))
 
-(defun systemctl--remove-keyword-params (seq)
-  "Remove all keyword/value pairs from SEQ."
-  (if (null seq) nil
-    (let ((head (car seq))
-          (tail (cdr seq)))
-      (if (keywordp head) (systemctl--remove-keyword-params (cdr tail))
-        (cons head (systemctl--remove-keyword-params tail))))))
 
 ;;; Systemctl
 
