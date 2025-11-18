@@ -414,14 +414,15 @@ job for the unit."
 ;;;###autoload
 (defun systemctl-daemon-reload (&optional manager)
   "Reload the systemd configuration on MANAGER (`user' or `system' (default))."
-  (interactive (list (pcase (read-answer
-                             "Reload the [s]ystem or [u]ser daemon? "
-                             '(("system" ?s "reload the system daemon")
-                               ("user" ?u "reload the user daemon")
-                               ("quit" ?q "abort")))
-                       ("system" 'system)
-                       ("user" 'user)
-                       (_ (keyboard-quit)))))
+  (interactive (list (or systemctl-manager
+                         (pcase (read-answer
+                                 "Reload the [s]ystem or [u]ser daemon? "
+                                 '(("system" ?s "reload the system daemon")
+                                   ("user" ?u "reload the user daemon")
+                                   ("quit" ?q "abort")))
+                           ("system" 'system)
+                           ("user" 'user)
+                           (_ (keyboard-quit))))))
   (systemctl--manage-systemd manager "Reload" 'async))
 
 
