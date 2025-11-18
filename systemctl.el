@@ -36,6 +36,32 @@
 
 (eval-when-compile (require 'cl-lib))
 
+;;; Constants
+
+(defconst systemctl--dbus-systemd-service "org.freedesktop.systemd1"
+  "D-Bus service name for systemd.")
+
+(defconst systemctl--dbus-systemd-path "/org/freedesktop/systemd1"
+  "D-Bus object path for the systemd manager.")
+
+(defconst systemctl--dbus-systemd-interface "org.freedesktop.systemd1.Manager"
+  "D-Bus interface for the systemd manager.")
+
+(defconst systemctl--dbus-logind-service "org.freedesktop.login1"
+  "D-Bus service name for logind.")
+
+(defconst systemctl--dbus-logind-path "/org/freedesktop/login1"
+  "D-Bus object path for the logind manager.")
+
+(defconst systemctl--dbus-logind-interface "org.freedesktop.login1.Manager"
+  "D-Bus interface for the logind manager.")
+
+(defconst systemctl--dbus-logind-session-interface "org.freedesktop.login1.Session"
+  "D-Bus interface for logind sessions.")
+
+(defconst systemctl--dbus-logind-session-path "/org/freedesktop/login1/session/auto"
+  "D-Bus object path for the auto-selected session.")
+
 (defgroup systemctl nil
   "Systemd control utilities."
   :prefix "systemctl-"
@@ -119,8 +145,8 @@ failure.  The second argument will be the return value or a list of
            ((or 'system 'nil) :system)
            ('user :session)
            (other (error "Invalid systemd manager selection: %S" other)))
-         "org.freedesktop.systemd1" "/org/freedesktop/systemd1"
-         "org.freedesktop.systemd1.Manager" method args))
+         systemctl--dbus-systemd-service systemctl--dbus-systemd-path
+         systemctl--dbus-systemd-interface method args))
 
 (defun systemctl--completion-annotation (unit)
   "Completion annotation function used when prompting for a systemd UNIT."
@@ -529,16 +555,16 @@ failure.  The second argument will be the return value or a list of
   (when async
     (push (and (functionp async) (systemctl--make-dbus-callback async)) args))
   (apply (if async #'dbus-call-method-asynchronously #'dbus-call-method)
-         :system "org.freedesktop.login1"
-         "/org/freedesktop/login1"
-         "org.freedesktop.login1.Manager" method args))
+         :system systemctl--dbus-logind-service
+         systemctl--dbus-logind-path
+         systemctl--dbus-logind-interface method args))
 
 (defun systemctl--logind-property (name)
   "Get the logind property named NAME."
   (dbus-get-property
-   :system "org.freedesktop.login1"
-   "/org/freedesktop/login1"
-   "org.freedesktop.login1.Manager" name))
+   :system systemctl--dbus-logind-service
+   systemctl--dbus-logind-path
+   systemctl--dbus-logind-interface name))
 
 ;;; Lock/Unlock
 
@@ -555,15 +581,17 @@ ERROR-MESSAGE are strings."
    ((null session)
     (if async
         (dbus-call-method-asynchronously
-         :system "org.freedesktop.login1"
-         "/org/freedesktop/login1/session/auto"
-         "org.freedesktop.login1.Session" action
+         :system systemctl--dbus-logind-service
+         systemctl--dbus-logind-session-path
+         systemctl--dbus-logind-session-interface
+         action
          (when (functionp async)
            (systemctl--make-dbus-callback async)))
       (dbus-call-method
-       :system "org.freedesktop.login1"
-       "/org/freedesktop/login1/session/auto"
-       "org.freedesktop.login1.Session" action)))
+       :system systemctl--dbus-logind-service
+       systemctl--dbus-logind-session-path
+       systemctl--dbus-logind-session-interface
+       action)))
    ((eq session t) (systemctl--manage-logind (concat action "Sessions") async))
    ((stringp session) (systemctl--manage-logind (concat action "Session") async session))
    (t (error "Invalid `session' argument"))))
