@@ -570,7 +570,8 @@ failure.  The second argument will be the return value or a list of
 ;;;###autoload
 (defun systemctl-lock (&optional session async)
   "Lock the current or specified SESSION.
-If SESSION is t, lock all sessions (requires authentication).
+If SESSION is t or when invoked with a prefix argument, lock all
+sessions (requires authentication).
 
 If ASYNC is non-nil, return immediately.
 If ASYNC is a function, it will be called when the method completes.
@@ -578,13 +579,14 @@ The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the nil or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
 ERROR-MESSAGE are strings."
-  (interactive)
+  (interactive (list (not (null current-prefix-arg)) 'async))
   (systemctl--lock-unlock-common "Lock" session async))
 
 ;;;###autoload
 (defun systemctl-unlock (&optional session async)
   "Unlock the current or specified SESSION.
-If SESSION is t, unlock all sessions (requires authentication).
+If SESSION is t or when invoked with a prefix argument, unlock all
+sessions (requires authentication).
 
 If ASYNC is non-nil, return immediately.
 If ASYNC is a function, it will be called when the method completes.
@@ -592,7 +594,7 @@ The first argument will be nil on success and an error symbol on
 failure.  The second argument will be the nil or a list of
 \\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
 ERROR-MESSAGE are strings."
-  (interactive)
+  (interactive (list (not (null current-prefix-arg)) 'async))
   (systemctl--lock-unlock-common "Unlock" session async))
 
 ;;; Suspend
