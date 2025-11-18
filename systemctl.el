@@ -550,7 +550,14 @@ failure.  The second argument will be the return value or a list of
 ;;; Lock/Unlock
 
 (defun systemctl--lock-unlock-common (action session async)
-  "Lock or Unlock (ACTION) the specified SESSION."
+  "Lock or Unlock (ACTION) the specified SESSION.
+
+If ASYNC is non-nil, return immediately.
+If ASYNC is a function, it will be called when the method completes.
+The first argument will be nil on success and an error symbol on
+failure.  The second argument will be the nil or a list of
+\\=(ERROR-TYPE ERROR-MESSAGE) where both the ERROR-TYPE and
+ERROR-MESSAGE are strings."
   (cond
    ((null session)
     (if async
