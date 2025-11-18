@@ -273,17 +273,17 @@ FILTER limits the units to prompt for. It can contain:
       (cons systemctl-manager systemctl-unit-types)
     systemctl-unit-types))
 
-(defun systemctl--interactive-control-args (operation include-files &optional prefix-arg)
+(defun systemctl--interactive-control-args (operation include-files &optional expect-prefix-arg)
   "Query the user for arguments to one of systemctl's unit control operations.
 If INCLUDE-FILES is t, unloaded units are included.
-If PREFIX-ARG is non-nil, the command takes a prefix argument in the
-3rd position. The value of PREFIX-ARG is appended to the prompt.
+If EXPECT-PREFIX-ARG is non-nil, the command takes a prefix argument
+in the 3rd position. The value of PREFIX-ARG is appended to the prompt.
 
 Return a list of:
 
 - The selected unit.
 - The systemd manager on which to operate.
-- If PREFIX-ARG is non-nil, the value of `current-prefix-arg'.
+- If EXPECT-PREFIX-ARG is non-nil, the value of `current-prefix-arg'.
 - A callback to report the command's outcome to the user.
 
 OPERATION is the name of the operation (a string). It's used in the
@@ -293,12 +293,13 @@ prompt and in error messages."
                           #'systemctl-read-unit-file
                         #'systemctl-read-unit)
                       (concat operation
-                              (and current-prefix-arg prefix-arg)
+                              (and current-prefix-arg
+                                   expect-prefix-arg)
                               ": ")
                       (systemctl--interactive-filters))))
     `( ,unit
        ,manager
-       ,@(when prefix-arg (list current-prefix-arg))
+       ,@(when expect-prefix-arg (list current-prefix-arg))
        ,(lambda (err res)
           (when err
             (message "%s %s failed: %s" operation unit (nth 1 res)))))))
