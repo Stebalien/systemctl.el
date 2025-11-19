@@ -151,13 +151,12 @@ failure.  The second argument will be the return value or a list of
 
 (defun systemctl--completion-annotation (unit)
   "Completion annotation function used when prompting for a systemd UNIT."
-  (concat
-   (propertize " " 'display '(space :align-to center))
-   (propertize
-    (or
-     (get-text-property 0 'systemctl--unit-description unit)
-     "[not loaded]")
-    'face 'completions-annotations)))
+  (let-alist (get-text-property 0 'systemctl--unit unit)
+    (concat
+     (propertize " " 'display '(space :align-to center))
+     (propertize
+      (or .description "not loaded")
+      'face 'completions-annotations))))
 
 (defun systemctl--completion-group (unit transform)
   "Completion group function used when prompting for a systemd UNIT.
@@ -170,10 +169,11 @@ Otherwise, return a group name suitable for the unit."
             ":"
             (file-name-extension unit))))
 
-(defun systemctl--format-unit-display-name (name manager &optional desc)
-  "Format unit NAME from MANAGER with DESC for display."
-  (propertize (format "%s/%s" manager name)
-              'systemctl--unit-description desc))
+(defun systemctl--format-unit-display-name (unit)
+  "Format UNIT for display."
+  (let-alist unit
+    (propertize (format "%s/%s" .manager .unit)
+                'systemctl--unit unit)))
 
 (defconst systemctl--completion-properties
   `((group-function . ,#'systemctl--completion-group)
@@ -184,8 +184,7 @@ Otherwise, return a group name suitable for the unit."
   "Make a completion table from a list of UNITS."
   (seq-map
    (lambda (unit)
-     (cons (apply #'systemctl--format-unit-display-name unit)
-           unit))
+     (cons (systemctl--format-unit-display-name unit) unit))
    units))
 
 (defun systemctl--choose-unit (prompt units)
@@ -224,8 +223,14 @@ MANAGER is one of `system' or `user'."
     (systemctl--manage-systemd manager "ListUnitsByPatterns" nil
                                '(:array) ; all states
                                (cons :array patterns))
-    (seq-map (pcase-lambda (`(,unit ,desc . ,_))
-               (list unit manager desc)))))
+    (seq-keep (pcase-lambda (`( ,unit ,desc ,loaded
+                                ,state ,substate ,_ ,dbus-path ))
+                `((unit . ,unit)
+                  (manager . ,manager)
+                  (active-state  . ,state)
+                  (active-substate . ,substate)
+                  (description . ,desc)
+                  (dbus-path . ,dbus-path))))))
 
 (defun systemctl--list-unit-files (manager patterns)
   "List all unit files belonging to MANAGER, filtering by PATTERNS if non-empty.
@@ -234,25 +239,39 @@ MANAGER is one of `system' or `user'."
     (systemctl--manage-systemd manager "ListUnitFilesByPatterns" nil
                                '(:array) ; all states
                                (cons :array patterns))
-    (seq-map 'car)
-    (seq-map 'file-name-nondirectory)
-    (seq-sort 'string-lessp)
-    (delete-consecutive-dups)
-    (seq-map (lambda (unit) (list unit manager)))))
+    (seq-map (pcase-lambda (`(,filename ,enablement-state))
+               `((unit . ,(file-name-nondirectory filename))
+                 (manager . ,manager)
+                 (filename . ,filename)
+                 (enablement-state . ,enablement-state))))))
+
+(defun systemctl--merge-consecutive (seq test merge)
+  "Merge consecutive elements in SEQ with MERGE when TEST returns non-nil."
+  (when seq
+    (let ((out (list (pop seq))))
+      (while-let ((next (pop seq)))
+        (if (funcall test (car out) next)
+            (cl-callf2 funcall merge (car out) next)
+          (push next out)))
+      (nreverse out))))
 
 (defun systemctl--list-all-units (manager patterns)
   "List all units belonging to MANAGER, filtering by PATTERNS if non-empty.
 MANAGER is one of `system' or `user'."
-  (thread-last
+  (systemctl--merge-consecutive
+   (sort
     (append
      (systemctl--list-units manager patterns)
      (systemctl--list-unit-files manager patterns))
-    (seq-sort (lambda (a b) (string-lessp (car a) (car b))))
-    (seq-remove
-     (let (prev)
-       (lambda (item)
-         (prog1 (string= (car prev) (car item))
-           (setq prev item)))))))
+    :key (lambda (unit) (alist-get 'unit unit))
+    :lessp #'string-lessp :in-place t)
+   (lambda (a b)
+     (string= (alist-get 'unit a) (alist-get 'unit b)))
+   (lambda (a b)
+     (systemctl--merge-consecutive
+      (sort (append a b) :key #'car :in-place t)
+      (lambda (a b) (eq (car a) (car b)))
+      (lambda (a _) a)))))
 
 (defun systemctl-read-unit (&optional prompt &rest filter)
   "Prompt for a unit (limited to loaded units).
@@ -286,13 +305,14 @@ FILTER limits the units to prompt for. It can contain:
             (append (when .user (systemctl--list-all-units 'user .patterns))
                     (when .system (systemctl--list-all-units 'system .patterns))))
            (unit (systemctl--choose-unit (or prompt "Unit file: ") units)))
-      (when (string-suffix-p "@" (file-name-base (car unit)))
-        (with-temp-buffer
-          (call-process "systemd-escape" nil t nil
-                        "--template"
-                        (car unit)
-                        (read-string "Instance: "))
-          (setcar unit (string-trim (buffer-string)))))
+      (let ((unit-name (assoc 'unit unit)))
+        (when (string-suffix-p "@" (file-name-base (cdr unit-name)))
+          (with-temp-buffer
+            (call-process "systemd-escape" nil t nil
+                          "--template"
+                          (cdr unit-name)
+                          (read-string "Instance: "))
+            (setcdr unit-name (string-trim (buffer-string))))))
       unit)))
 
 (defun systemctl--interactive-filters ()
@@ -316,21 +336,20 @@ Return a list of:
 
 OPERATION is the name of the operation (a string). It's used in the
 prompt and in error messages."
-  (pcase-let ((`(,unit ,manager)
-               (apply (if include-files
-                          #'systemctl-read-unit-file
-                        #'systemctl-read-unit)
-                      (concat operation
-                              (and current-prefix-arg
-                                   expect-prefix-arg)
-                              ": ")
-                      (systemctl--interactive-filters))))
-    `( ,unit
-       ,manager
+  (let-alist (apply (if include-files
+                        #'systemctl-read-unit-file
+                      #'systemctl-read-unit)
+                    (concat operation
+                            (and current-prefix-arg
+                                 expect-prefix-arg)
+                            ": ")
+                    (systemctl--interactive-filters))
+    `( ,.unit
+       ,.manager
        ,@(when expect-prefix-arg (list current-prefix-arg))
        ,(lambda (err res)
           (when err
-            (message "%s %s failed: %s" operation unit (nth 1 res)))))))
+            (message "%s %s failed: %s" operation .unit (nth 1 res)))))))
 
 
 ;;;###autoload
@@ -454,21 +473,20 @@ Returns a list of:
 - A callback to report the command's outcome to the user.
 
 COMMAND is the name of the command (a string)."
-  (pcase-let ((`(,unit ,manager)
-               (apply #'systemctl-read-unit-file
-                      (concat command ": ")
-                      (systemctl--interactive-filters))))
-    (list unit manager current-prefix-arg
+  (let-alist (apply #'systemctl-read-unit-file
+                    (concat command ": ")
+                    (systemctl--interactive-filters))
+    (list .unit .manager current-prefix-arg
           (lambda (err res)
             (if err
-                (message "%s %s failed: %s" command unit (nth 1 res))
+                (message "%s %s failed: %s" command .unit (nth 1 res))
               (when (length= res 1) (push t res))
               (pcase res
                 (`(nil ,_)
-                 (message "%s %s: unit has no install section" command unit))
-                (`(t nil) (message "%s %s: nothing to do" command unit))
+                 (message "%s %s: unit has no install section" command .unit))
+                (`(t nil) (message "%s %s: nothing to do" command .unit))
                 (`(t ,ops)
-                 (message "%s %s: %s" command unit
+                 (message "%s %s: %s" command .unit
                           (systemctl--format-link-ops ops)))))))))
 
 ;;;###autoload
