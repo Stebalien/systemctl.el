@@ -225,12 +225,13 @@ MANAGER is one of `system' or `user'."
                                (cons :array patterns))
     (seq-keep (pcase-lambda (`( ,unit ,desc ,loaded
                                 ,state ,substate ,_ ,dbus-path ))
-                `((unit . ,unit)
-                  (manager . ,manager)
-                  (active-state  . ,state)
-                  (active-substate . ,substate)
-                  (description . ,desc)
-                  (dbus-path . ,dbus-path))))))
+                (unless (string= loaded "not-found")
+                  `((unit . ,unit)
+                    (manager . ,manager)
+                    (active-state  . ,state)
+                    (active-substate . ,substate)
+                    (description . ,desc)
+                    (dbus-path . ,dbus-path)))))))
 
 (defun systemctl--list-unit-files (manager patterns)
   "List all unit files belonging to MANAGER, filtering by PATTERNS if non-empty.
