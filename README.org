@@ -84,3 +84,10 @@ The enable, disable, mask, and unmask commands support a prefix argument to oper
 :END:
 
 You can reload the systemd daemon's config, unit files, etc. by calling ~systemctl-daemon-reload~.
+
+* Unit Browser (~systemctl-ui~)
+:PROPERTIES:
+:ID:       8c2a4f1e-9b3d-4c5e-a7f2-1d6e8f0a2b4c
+:END:
+
+This package includes an automatically updated tabulated list interface for browsing and managing systemd units interactively. The command ~systemctl-ui-list-units~ opens a buffer displaying all available units with their current status.
