@@ -62,6 +62,9 @@
 (defconst systemctl--dbus-logind-session-path "/org/freedesktop/login1/session/auto"
   "D-Bus object path for the auto-selected session.")
 
+(defvar systemctl--busses '((system . :system) (user . :session))
+  "D-Bus busses for each systemd manager.")
+
 (defgroup systemctl nil
   "Systemd control utilities."
   :prefix "systemctl-"
@@ -127,6 +130,10 @@ second argument is the return-value."
 
 ;;; Systemctl
 
+(defun systemctl--bus-for-manager (manager)
+  (or (alist-get (or manager 'system) systemctl--busses)
+      (error "Invalid systemd manager selection: %S" manager)))
+
 (defun systemctl--manage-systemd (manager method async &rest args)
   "Invoke a management METHOD on systemd with the specified ARGS.
 
@@ -142,10 +149,7 @@ failure.  The second argument will be the return value or a list of
   (when async
     (push (and (functionp async) (systemctl--make-dbus-callback async)) args))
   (apply (if async #'dbus-call-method-asynchronously #'dbus-call-method)
-         (pcase manager
-           ((or 'system 'nil) :system)
-           ('user :session)
-           (other (error "Invalid systemd manager selection: %S" other)))
+         (systemctl--bus-for-manager manager)
          systemctl--dbus-systemd-service systemctl--dbus-systemd-path
          systemctl--dbus-systemd-interface method args))
 
