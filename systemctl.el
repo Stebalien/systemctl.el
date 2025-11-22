@@ -352,10 +352,14 @@ prompt and in error messages."
     `( ,.unit
        ,.manager
        ,@(when expect-prefix-arg (list current-prefix-arg))
-       ,(lambda (err res)
-          (when err
-            (message "%s %s failed: %s" operation .unit (nth 1 res)))))))
+       ,(systemctl--interactive-control-callback operation .unit))))
 
+(defun systemctl--interactive-control-callback (command unit)
+  "Return the interactive callback for the control COMMAND.
+UNIT is the systemd unit to operate on."
+  (lambda (err res)
+    (when err
+      (message "%s %s failed: %s" command unit (nth 1 res)))))
 
 ;;;###autoload
 (defun systemctl-start (unit &optional manager async)
@@ -482,17 +486,22 @@ COMMAND is the name of the command (a string)."
                     (concat command ": ")
                     (systemctl--interactive-filters))
     (list .unit .manager current-prefix-arg
-          (lambda (err res)
-            (if err
-                (message "%s %s failed: %s" command .unit (nth 1 res))
-              (when (length= res 1) (push t res))
-              (pcase res
-                (`(nil ,_)
-                 (message "%s %s: unit has no install section" command .unit))
-                (`(t nil) (message "%s %s: nothing to do" command .unit))
-                (`(t ,ops)
-                 (message "%s %s: %s" command .unit
-                          (systemctl--format-link-ops ops)))))))))
+          (systemctl--interactive-link-callback command .unit))))
+
+(defun systemctl--interactive-link-callback (command unit)
+  "Return the interactive callback for the link COMMAND.
+UNIT is the systemd unit to operate on."
+  (lambda (err res)
+    (if err
+        (message "%s %s failed: %s" command unit (nth 1 res))
+      (when (length= res 1) (push t res))
+      (pcase res
+        (`(nil ,_)
+         (message "%s %s: unit has no install section" command unit))
+        (`(t nil) (message "%s %s: nothing to do" command unit))
+        (`(t ,ops)
+         (message "%s %s: %s" command unit
+                  (systemctl--format-link-ops ops)))))))
 
 ;;;###autoload
 (defun systemctl-enable (unit &optional manager runtime async)
