@@ -185,7 +185,7 @@ the value of IS-LINK-CMD."
          (doc (format "%s the unit at point." op)))
     `(defun ,fn-name ,(and has-arg '(&optional arg))
        ,doc
-       (interactive ,(and has-arg '(current-prefix-arg)) systemctl-ui-mode)
+       (interactive ,(and has-arg '(list current-prefix-arg)) systemctl-ui-mode)
        (if-let* ((unit-info (systemctl-ui--get-current-unit)))
            (let-alist unit-info
              (,cmd-name .unit .manager
