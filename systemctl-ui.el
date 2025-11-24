@@ -417,7 +417,7 @@ INVALIDATED-PROPERTIES is a list of invalidated property names."
   (format "*systemctl (%S)*" manager))
 
 ;;;###autoload
-(defun systemctl-ui-list-units (&optional manager)
+(defun systemctl-ui (&optional manager)
   "Display systemd units for MANAGER in a list."
   (interactive (list (or systemctl-ui-manager
                          (pcase (read-answer
