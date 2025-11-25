@@ -116,54 +116,76 @@ Inherits from `systemctl-manager' by default."
          ("Active" 12 t)
          ("State" 12 t)
          ("Description" 0 nil)]
-        tabulated-list-entries #'systemctl-ui--entries
         tabulated-list-sort-key '("Unit" . nil)
         tabulated-list-padding 2)
+  (add-hook 'tabulated-list-revert-hook
+            #'systemctl-ui--update-entries nil t)
   (tabulated-list-init-header))
 
 (defun systemctl-ui--update-units ()
   "Collect all units according to current filters."
   (setq systemctl-ui--units
-        (mapcar
-         (lambda (unit)
-           (let-alist unit
-             (cons (or .dbus-path .filename) unit)))
-         (systemctl--list-all-units systemctl-ui--manager nil)))
+        (systemctl--list-all-units systemctl-ui--manager nil))
   (tabulated-list-revert))
 
-(defun systemctl-ui--entries ()
-  "Return formatted `systemctl-ui' entries."
+(defun systemctl-ui--update-entries ()
+  "Update the `systemctl-ui' tabulated list entries."
   (cl-loop
-   for (id . unit) in systemctl-ui--units
-   collect
+   with groups
+   for unit in systemctl-ui--units
+   do
    (let-alist unit
-     (list
-      id
-      (vector
-       .unit
-       (propertize
-        (or .enablement-state "-")
-        'face
-        (pcase .enablement-state
-          ("enabled" 'systemctl-ui-enabled)
-          ("indirect" 'systemctl-ui-indirect)
-          ("disabled" 'systemctl-ui-disabled)
-          ("bad" 'systemctl-ui-bad)
-          ("masked" 'systemctl-ui-masked)
-          (_ 'default)))
-       (propertize
-        (or .active-state "inactive")
-        'face
-        (pcase .active-state
-          ("active" 'systemctl-ui-active)
-          ((or 'nil "inactive") 'systemctl-ui-inactive)
-          (_ 'systemctl-ui-failed)))
-       (or .active-substate "-")
-       (or .description ""))))))
+     (push
+      (list
+       (cons .manager .unit)
+       (vector
+        (or .unit .filename .dbus-path)
+        (propertize
+         (or .enablement-state "-")
+         'face
+         (pcase .enablement-state
+           ("enabled" 'systemctl-ui-enabled)
+           ("indirect" 'systemctl-ui-indirect)
+           ("disabled" 'systemctl-ui-disabled)
+           ("bad" 'systemctl-ui-bad)
+           ("masked" 'systemctl-ui-masked)
+           (_ 'default)))
+        (propertize
+         (or .active-state "inactive")
+         'face
+         (pcase .active-state
+           ("active" 'systemctl-ui-active)
+           ((or 'nil "inactive") 'systemctl-ui-inactive)
+           (_ 'systemctl-ui-failed)))
+        (or .active-substate "-")
+        (or .description "")))
+      (alist-get .manager groups)))
+   finally return
+   (if (length< groups 2)
+       (setq tabulated-list-entries (cdar groups)
+             tabulated-list-groups nil)
+     (setq tabulated-list-entries nil
+           tabulated-list-groups
+           (cl-loop for (group . entries) in groups
+                    collect (cons (format "%S units" group)
+                                  entries))))))
 
 (defun systemctl-ui--get-current-unit ()
   "Get the unit at point."
-  (cdr (assoc (tabulated-list-get-id) systemctl-ui--units)))
+  (cl-loop
+   with (manager . name) = (tabulated-list-get-id)
+   for unit in systemctl-ui--units
+   when (and (string= (alist-get 'unit unit) name)
+             (eq (alist-get 'manager unit) manager))
+   return unit))
+
+(defun systemctl-ui--get-unit-by-dbus (path)
+  "Return the specified unit by D-Bus PATH."
+  (cl-assert systemctl-ui--manager)
+  (cl-loop
+   for unit in systemctl-ui--units
+   when (string= (alist-get 'dbus-path unit) path)
+   return unit))
 
 (defmacro systemctl-ui--defcmd (action has-arg is-link-cmd)
   "Define a `systemctl-ui' command.
@@ -258,6 +280,7 @@ The current buffer will be captured by the signal handler and:
 
 (defun systemctl-ui--subscribe ()
   "Subscribe to systemd events on BUS (either :system or :session)."
+  (cl-assert systemctl-ui--manager)
   (let ((bus (systemctl--bus-for-manager systemctl-ui--manager))
         (buf (current-buffer)))
     (dbus-call-method
@@ -352,7 +375,7 @@ INVALIDATED-PROPERTIES is a list of invalidated property names."
   (if-let* ((unit (and (not (and invalidated-properties
                                  (cl-loop for (prop . _) in systemctl-ui--unit-properties
                                           thereis (member prop invalidated-properties))))
-                       (cdr (assoc unit-path systemctl-ui--units)))))
+                       (systemctl-ui--get-unit-by-dbus unit-path))))
       (cl-loop for (prop . key) in systemctl-ui--unit-properties
                for val = (assoc prop changed-properties)
                when val do
@@ -362,17 +385,20 @@ INVALIDATED-PROPERTIES is a list of invalidated property names."
 
 (defun systemctl-ui--refresh-unit (unit-path)
   "Refresh information for UNIT-PATH."
-    (if-let* ((unit (systemctl-ui--fetch-single-unit unit-path)))
-        (setf (alist-get unit-path systemctl-ui--units nil nil #'string=)
-              unit)
-      (setq systemctl-ui--units
-            (assoc-delete-all unit-path systemctl-ui--units #'string=)))
-    (tabulated-list-revert))
+  (if-let* ((unit (systemctl-ui--fetch-single-unit unit-path)))
+      (progn
+        (if-let* ((existing (systemctl-ui--get-unit-by-dbus unit-path)))
+            (setf (car existing) (car unit)
+                  (cdr existing) (cdr unit))
+          (push unit systemctl-ui--units))
+        (tabulated-list-revert))
+    (systemctl-ui--remove-unit unit-path)))
 
 (defun systemctl-ui--remove-unit (unit-path)
   "Remove UNIT-PATH from the units list."
-  (setq systemctl-ui--units
-        (assoc-delete-all unit-path systemctl-ui--units #'string=))
+  (cl-callf2 cl-delete unit-path systemctl-ui--units
+    :test #'string=
+    :key (lambda (unit) (alist-get 'dbus-path unit)))
   (tabulated-list-revert))
 
 (defun systemctl-ui--fetch-single-unit (unit-path)
