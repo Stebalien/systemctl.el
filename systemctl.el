@@ -181,6 +181,7 @@ Otherwise, return a group name suitable for the unit."
 
 (defconst systemctl--completion-properties
   `((group-function . ,#'systemctl--completion-group)
+    (category . systemctl)
     (annotation-function . ,#'systemctl--completion-annotation))
   "Completion properties for `systemctl-read-unit' prompts.")
 
