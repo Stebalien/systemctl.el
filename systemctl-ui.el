@@ -271,12 +271,12 @@ The current buffer will be captured by the signal handler and:
         (fnname (gensym "fn")))
   `(let ((,bufvar (current-buffer))
          (,fnname (lambda ,arg-list ,@body)))
-     (lambda ,arg-list
+     (lambda (&rest args)
        (if-let* ((win (get-buffer-window buf t)))
            (with-selected-window win
-             (funcall ,fnname ,@arg-list))
+             (apply ,fnname args))
          (with-current-buffer buf
-           (funcall ,fnname ,@arg-list)))))))
+           (apply ,fnname args)))))))
 
 (defun systemctl-ui--subscribe ()
   "Subscribe to systemd events on BUS (either :system or :session)."
