@@ -26,6 +26,7 @@
 ;;; Code:
 
 (require 'systemctl)
+(require 'systemctl-status)
 (require 'tabulated-list)
 (require 'dbus)
 
@@ -230,20 +231,7 @@ the value of IS-LINK-CMD."
   (interactive)
   (if-let* ((unit-info (systemctl-ui--get-current-unit)))
       (let-alist unit-info
-        (let ((buffer (get-buffer-create (format "*systemctl (%s): %s*" .manager .unit))))
-          (with-current-buffer buffer
-            (erase-buffer)
-            (insert " ") ; Keep the buffer from scrolling.
-            (goto-char (point-min))
-            (make-process
-             :name (format "systemctl %s" .unit)
-             :buffer (current-buffer)
-             :noquery t
-             :command
-             `("systemctl" ,@(when (eq .manager 'user) (list "--user")) "status" "--" ,.unit)
-             :sentinel 'ignore)
-            (view-mode))
-          (pop-to-buffer buffer)))
+        (systemctl-status .unit .manager))
     (user-error "No unit at point")))
 
 (defun systemctl-ui--setup-dbus ()
